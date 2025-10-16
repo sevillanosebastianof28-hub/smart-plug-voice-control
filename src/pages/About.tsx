@@ -41,15 +41,20 @@ const About = () => {
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 relative">
         <div className="absolute inset-0 luminous-bg pointer-events-none" />
         <div className="max-w-2xl w-full space-y-6 animate-fade-in relative z-10">
+          {/* Logo Section Outside Box */}
+          <div className="flex flex-col items-center space-y-3">
+            <div className="p-3 rounded-xl bg-primary/10 glow-green">
+              <img src={logo} alt="Smart LumoSwitch Logo" className="h-12 w-12 sm:h-16 sm:w-16 object-contain" />
+            </div>
+            <p className="text-muted-foreground text-sm sm:text-base font-medium">Simple. Smart. Voice-Controlled.</p>
+          </div>
+
           {/* About Section */}
           <div className="bg-card/80 backdrop-blur-sm border rounded-xl p-6 space-y-4 card-glow luminous-border">
-            {/* Logo Header */}
-            <div className="flex flex-col items-center space-y-3 pb-4 border-b border-border/50">
-              <div className="p-3 rounded-xl bg-primary/10 glow-green">
-                <img src={logo} alt="Smart LumoSwitch Logo" className="h-12 w-12 sm:h-16 sm:w-16 object-contain" />
-              </div>
-              <p className="text-muted-foreground text-sm sm:text-base font-medium">Simple. Smart. Voice-Controlled.</p>
-            </div>
+            {/* Header */}
+            <h2 className="text-xl sm:text-2xl font-bold text-center text-glow pb-4 border-b border-border/50">
+              About Smart LumoSwitch
+            </h2>
 
             <p className="text-muted-foreground text-sm sm:text-base leading-relaxed text-center">
               Smart LumoSwitch is designed to simply control your smart plug through an intuitive app with two easy
