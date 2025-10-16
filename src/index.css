@@ -57,7 +57,8 @@ All colors MUST be HSL.
 @layer utilities {
   .glow-green {
     box-shadow: 0 0 20px hsl(var(--neon-green) / 0.6),
-                0 0 40px hsl(var(--neon-green) / 0.3);
+                0 0 40px hsl(var(--neon-green) / 0.3),
+                0 0 60px hsl(var(--neon-green) / 0.1);
   }
   
   .glow-cyan {
@@ -66,7 +67,30 @@ All colors MUST be HSL.
   }
 
   .text-glow {
-    text-shadow: 0 0 10px hsl(var(--neon-green) / 0.8);
+    text-shadow: 0 0 10px hsl(var(--neon-green) / 0.8),
+                 0 0 20px hsl(var(--neon-green) / 0.4);
+  }
+
+  .luminous-bg {
+    background: radial-gradient(
+      circle at 50% 50%,
+      hsl(var(--primary) / 0.15) 0%,
+      transparent 50%
+    );
+  }
+
+  .luminous-border {
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 15px hsl(var(--primary) / 0.2);
+  }
+
+  .card-glow {
+    box-shadow: 0 4px 20px hsl(var(--primary) / 0.1);
+    transition: box-shadow 0.3s ease;
+  }
+
+  .card-glow:hover {
+    box-shadow: 0 8px 30px hsl(var(--primary) / 0.2);
   }
 }
 

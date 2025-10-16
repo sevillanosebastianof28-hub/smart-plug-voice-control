@@ -123,9 +123,11 @@ const Home = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative">
+      <div className="absolute inset-0 luminous-bg pointer-events-none" />
+      
       {/* Header */}
-      <header className="border-b border-border p-4 transition-all">
+      <header className="border-b border-border p-4 transition-all relative z-10 bg-background/80 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-primary/10 glow-green transition-all hover:scale-110">
@@ -169,7 +171,7 @@ const Home = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8">
+      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 relative z-10">
         <div className="max-w-2xl w-full space-y-8 sm:space-y-12 animate-fade-in">
           {/* Power Button */}
           <div className="flex flex-col items-center space-y-6">
@@ -193,7 +195,10 @@ const Home = () => {
                 Plug is {plugStatus ? 'ON' : 'OFF'}
               </h2>
               <p className="text-sm sm:text-base text-muted-foreground">
-                Tap the button to toggle power
+                {plugStatus ? 'Device is currently powered' : 'Device is currently off'}
+              </p>
+              <p className="text-xs text-muted-foreground/70">
+                {controlMode === 'button' ? 'Tap the button to toggle' : 'Use voice commands below'}
               </p>
             </div>
           </div>
@@ -223,7 +228,7 @@ const Home = () => {
           {/* Button Control */}
           {controlMode === 'button' && (
             <div className="space-y-4 animate-fade-in">
-              <div className="bg-card border border-border rounded-xl p-4 sm:p-6 space-y-4 transition-all hover:border-primary/50">
+              <div className="bg-card/80 backdrop-blur-sm border rounded-xl p-4 sm:p-6 space-y-4 card-glow luminous-border">
                 <h3 className="text-base sm:text-lg font-semibold text-center">Manual Control</h3>
                 <p className="text-xs sm:text-sm text-muted-foreground text-center">
                   Use the buttons below to control your smart plug
@@ -269,7 +274,7 @@ const Home = () => {
           {/* Voice Control */}
           {controlMode === 'voice' && (
             <div className="space-y-4 sm:space-y-6 animate-fade-in">
-              <div className="bg-card border border-border rounded-xl p-4 sm:p-6 space-y-4 transition-all hover:border-primary/50">
+              <div className="bg-card/80 backdrop-blur-sm border rounded-xl p-4 sm:p-6 space-y-4 card-glow luminous-border">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base sm:text-lg font-semibold">Voice Control</h3>
                   {isListening && (
@@ -304,10 +309,20 @@ const Home = () => {
                 </Button>
               </div>
 
-              <div className="bg-card/50 border border-border/50 rounded-lg p-3 sm:p-4 transition-all">
+              <div className="bg-card/50 border border-border/50 rounded-lg p-3 sm:p-4 transition-all luminous-border">
                 <p className="text-xs sm:text-sm text-muted-foreground text-center">
                   <span className="font-medium text-foreground">Voice Commands:</span>{' '}
                   "turn on" or "turn off"
+                </p>
+              </div>
+
+              {/* ESP32 Connection Info */}
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 transition-all">
+                <p className="text-xs text-muted-foreground text-center">
+                  <span className="font-medium text-primary">ESP32 Ready:</span> Commands sent to{' '}
+                  <code className="text-xs bg-background/50 px-1 py-0.5 rounded">
+                    {localStorage.getItem('esp32-ip') || 'Configure via WiFi Setup'}
+                  </code>
                 </p>
               </div>
             </div>
