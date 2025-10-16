@@ -17,9 +17,9 @@ export default defineConfig(({ mode }) => ({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'robots.txt'],
       manifest: {
-        name: 'Smart Plug Voice',
-        short_name: 'Smart Plug',
-        description: 'Control your smart plugs with voice commands',
+        name: 'Smart LumoSwitch',
+        short_name: 'LumoSwitch',
+        description: 'Control your smart plugs with voice commands or simple switches',
         theme_color: '#1a1a1a',
         background_color: '#1a1a1a',
         display: 'standalone',

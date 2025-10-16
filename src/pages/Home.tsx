@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { Power, Mic, MicOff, Wifi, LogOut } from 'lucide-react';
+import { Power, Mic, MicOff, Wifi, LogOut, Info } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { WiFiSetupDialog } from '@/components/WiFiSetupDialog';
+import { useNavigate } from 'react-router-dom';
 
 const Home = () => {
   const [plugStatus, setPlugStatus] = useState(false);
@@ -12,6 +13,7 @@ const Home = () => {
   const [wifiDialogOpen, setWifiDialogOpen] = useState(false);
   const [controlMode, setControlMode] = useState<'voice' | 'button'>('button');
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const savedStatus = localStorage.getItem('plug-status');
@@ -123,27 +125,43 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b border-border p-4">
+      <header className="border-b border-border p-4 transition-all">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-primary/10 glow-green">
+            <div className="p-2 rounded-lg bg-primary/10 glow-green transition-all hover:scale-110">
               <Power className="h-5 w-5 text-primary" />
             </div>
-            <span className="font-semibold">Smart Plug Voice</span>
+            <span className="font-semibold text-sm sm:text-base">Smart LumoSwitch</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground hidden sm:inline">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="text-xs sm:text-sm text-muted-foreground hidden md:inline">
               {user?.email}
             </span>
             <Button 
               variant="ghost" 
               size="icon" 
+              onClick={() => navigate('/about')}
+              title="About"
+              className="transition-transform hover:scale-110"
+            >
+              <Info className="h-5 w-5" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
               onClick={() => setWifiDialogOpen(true)}
               title="WiFi Setup"
+              className="transition-transform hover:scale-110"
             >
               <Wifi className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={logout} title="Logout">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={logout} 
+              title="Logout"
+              className="transition-transform hover:scale-110"
+            >
               <LogOut className="h-5 w-5" />
             </Button>
           </div>
@@ -151,65 +169,67 @@ const Home = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-4">
-        <div className="max-w-2xl w-full space-y-12">
+      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8">
+        <div className="max-w-2xl w-full space-y-8 sm:space-y-12 animate-fade-in">
           {/* Power Button */}
           <div className="flex flex-col items-center space-y-6">
             <button
               onClick={togglePlug}
-              className={`relative w-48 h-48 rounded-full transition-all duration-300 ${
+              className={`relative w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 rounded-full transition-all duration-500 hover:scale-105 ${
                 plugStatus
                   ? 'bg-primary glow-green scale-105'
                   : 'bg-secondary hover:bg-secondary/80'
               }`}
             >
               <Power
-                className={`absolute inset-0 m-auto h-24 w-24 transition-all duration-300 ${
+                className={`absolute inset-0 m-auto h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28 transition-all duration-500 ${
                   plugStatus ? 'text-primary-foreground rotate-180' : 'text-muted-foreground'
                 }`}
               />
             </button>
 
-            <div className="text-center space-y-2">
-              <h2 className={`text-3xl font-bold ${plugStatus ? 'text-glow' : ''}`}>
+            <div className="text-center space-y-2 transition-all">
+              <h2 className={`text-2xl sm:text-3xl md:text-4xl font-bold transition-all ${plugStatus ? 'text-glow' : ''}`}>
                 Plug is {plugStatus ? 'ON' : 'OFF'}
               </h2>
-              <p className="text-muted-foreground">
+              <p className="text-sm sm:text-base text-muted-foreground">
                 Tap the button to toggle power
               </p>
             </div>
           </div>
 
           {/* Control Mode Switcher */}
-          <div className="flex gap-2 p-1 bg-card border border-border rounded-lg">
+          <div className="flex gap-2 p-1 bg-card border border-border rounded-lg transition-all">
             <Button
               variant={controlMode === 'button' ? 'default' : 'ghost'}
-              className="flex-1"
+              className="flex-1 transition-all text-xs sm:text-sm"
               onClick={() => setControlMode('button')}
             >
-              <Power className="mr-2 h-4 w-4" />
-              Button Control
+              <Power className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Button Control</span>
+              <span className="sm:hidden">Button</span>
             </Button>
             <Button
               variant={controlMode === 'voice' ? 'default' : 'ghost'}
-              className="flex-1"
+              className="flex-1 transition-all text-xs sm:text-sm"
               onClick={() => setControlMode('voice')}
             >
-              <Mic className="mr-2 h-4 w-4" />
-              Voice Control
+              <Mic className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Voice Control</span>
+              <span className="sm:hidden">Voice</span>
             </Button>
           </div>
 
           {/* Button Control */}
           {controlMode === 'button' && (
-            <div className="space-y-4">
-              <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-                <h3 className="text-lg font-semibold text-center">Manual Control</h3>
-                <p className="text-sm text-muted-foreground text-center">
+            <div className="space-y-4 animate-fade-in">
+              <div className="bg-card border border-border rounded-xl p-4 sm:p-6 space-y-4 transition-all hover:border-primary/50">
+                <h3 className="text-base sm:text-lg font-semibold text-center">Manual Control</h3>
+                <p className="text-xs sm:text-sm text-muted-foreground text-center">
                   Use the buttons below to control your smart plug
                 </p>
                 
-                <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 pt-2">
                   <Button
                     onClick={() => {
                       setPlugStatus(true);
@@ -219,10 +239,10 @@ const Home = () => {
                       toast({ title: 'Plug turned ON' });
                     }}
                     disabled={plugStatus}
-                    className="h-20 text-lg"
+                    className="h-16 sm:h-20 text-sm sm:text-lg transition-all hover:scale-105"
                     variant={plugStatus ? 'secondary' : 'default'}
                   >
-                    <Power className="mr-2 h-6 w-6" />
+                    <Power className="mr-1 sm:mr-2 h-5 w-5 sm:h-6 sm:w-6" />
                     Turn ON
                   </Button>
                   
@@ -235,10 +255,10 @@ const Home = () => {
                       toast({ title: 'Plug turned OFF' });
                     }}
                     disabled={!plugStatus}
-                    className="h-20 text-lg"
+                    className="h-16 sm:h-20 text-sm sm:text-lg transition-all hover:scale-105"
                     variant={!plugStatus ? 'secondary' : 'default'}
                   >
-                    <Power className="mr-2 h-6 w-6" />
+                    <Power className="mr-1 sm:mr-2 h-5 w-5 sm:h-6 sm:w-6" />
                     Turn OFF
                   </Button>
                 </div>
@@ -248,44 +268,44 @@ const Home = () => {
 
           {/* Voice Control */}
           {controlMode === 'voice' && (
-            <div className="space-y-6">
-              <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+            <div className="space-y-4 sm:space-y-6 animate-fade-in">
+              <div className="bg-card border border-border rounded-xl p-4 sm:p-6 space-y-4 transition-all hover:border-primary/50">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Voice Control</h3>
+                  <h3 className="text-base sm:text-lg font-semibold">Voice Control</h3>
                   {isListening && (
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                      <span className="text-sm text-primary">Listening...</span>
+                      <span className="text-xs sm:text-sm text-primary">Listening...</span>
                     </div>
                   )}
                 </div>
 
-                <p className="text-sm text-muted-foreground min-h-[40px] flex items-center">
+                <p className="text-xs sm:text-sm text-muted-foreground min-h-[40px] flex items-center transition-all">
                   {feedback}
                 </p>
 
                 <Button
                   onClick={startListening}
                   disabled={isListening}
-                  className={`w-full ${isListening ? 'glow-cyan' : ''}`}
+                  className={`w-full transition-all hover:scale-105 ${isListening ? 'glow-cyan' : ''}`}
                   size="lg"
                 >
                   {isListening ? (
                     <>
-                      <MicOff className="mr-2 h-5 w-5" />
-                      Listening...
+                      <MicOff className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="text-sm sm:text-base">Listening...</span>
                     </>
                   ) : (
                     <>
-                      <Mic className="mr-2 h-5 w-5" />
-                      Start Voice Command
+                      <Mic className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="text-sm sm:text-base">Start Voice Command</span>
                     </>
                   )}
                 </Button>
               </div>
 
-              <div className="bg-card/50 border border-border/50 rounded-lg p-4">
-                <p className="text-sm text-muted-foreground text-center">
+              <div className="bg-card/50 border border-border/50 rounded-lg p-3 sm:p-4 transition-all">
+                <p className="text-xs sm:text-sm text-muted-foreground text-center">
                   <span className="font-medium text-foreground">Voice Commands:</span>{' '}
                   "turn on" or "turn off"
                 </p>
