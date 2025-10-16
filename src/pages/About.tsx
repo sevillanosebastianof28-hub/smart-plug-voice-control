@@ -74,21 +74,21 @@ const About = () => {
           </div>
 
           {/* Developers Section */}
-          <div className="bg-card/80 backdrop-blur-sm border rounded-xl p-4 sm:p-6 space-y-3 card-glow luminous-border">
-            <h2 className="text-base sm:text-lg font-semibold text-center">Development Team</h2>
+          <div className="bg-card/80 backdrop-blur-sm border rounded-xl p-4 sm:p-5 space-y-3 card-glow luminous-border">
+            <h2 className="text-base sm:text-lg font-semibold text-center mb-3">Development Team</h2>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-w-2xl mx-auto">
               {developers.map((developer, index) => (
                 <div
                   key={index}
-                  className="bg-background/50 rounded-lg p-2.5 sm:p-3 border border-border/50 text-center transition-all hover:border-primary/50 hover:scale-105"
+                  className="bg-background/50 rounded-lg py-2.5 px-2 border border-border/50 text-center transition-all hover:border-primary/50 hover:scale-105"
                 >
                   <p className="text-xs sm:text-sm font-medium leading-tight">{developer}</p>
                 </div>
               ))}
             </div>
 
-            <div className="pt-2 border-t border-border text-center">
+            <div className="pt-2.5 border-t border-border text-center mt-3">
               <p className="text-xs text-muted-foreground">© 2025 Smart LumoSwitch Team</p>
             </div>
           </div>
