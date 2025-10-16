@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
-import { Zap } from 'lucide-react';
 import { z } from 'zod';
+import logo from '@/assets/logo.png';
 
 const signupSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -54,11 +54,11 @@ const Signup = () => {
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
           <div className="flex justify-center">
-            <div className="p-3 rounded-2xl bg-primary/10 glow-green">
-              <Zap className="h-12 w-12 text-primary" />
+            <div className="p-4 rounded-2xl bg-primary/10 glow-green">
+              <img src={logo} alt="Smart LumoSwitch Logo" className="h-16 w-16 object-contain" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold text-glow">Smart Plug Voice</h1>
+          <h1 className="text-4xl font-bold text-glow">Smart LumoSwitch</h1>
           <p className="text-muted-foreground">Control your devices with your voice</p>
         </div>
 

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Power, Mic } from "lucide-react";
+import { ArrowLeft, Mic } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import logo from '@/assets/logo.png';
 
 const About = () => {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ const About = () => {
           </Button>
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-primary/10 glow-green">
-              <Power className="h-5 w-5 text-primary" />
+              <img src={logo} alt="Smart LumoSwitch Logo" className="h-5 w-5 object-contain" />
             </div>
             <span className="font-semibold">Smart LumoSwitch</span>
           </div>
@@ -56,7 +57,7 @@ const About = () => {
             <div className="grid sm:grid-cols-2 gap-3">
               <div className="bg-background/50 rounded-lg p-3 border border-border/50 transition-all hover:border-primary/30">
                 <div className="flex items-center gap-2 mb-1">
-                  <Power className="h-4 w-4 text-primary" />
+                  <img src={logo} alt="Switch Control" className="h-4 w-4 object-contain" />
                   <h3 className="font-semibold text-foreground text-sm">Switch Control</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">Instant ON/OFF control</p>

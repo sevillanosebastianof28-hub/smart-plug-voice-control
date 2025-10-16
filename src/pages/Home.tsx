@@ -5,6 +5,7 @@ import { Power, Mic, MicOff, Wifi, LogOut, Info } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { WiFiSetupDialog } from '@/components/WiFiSetupDialog';
 import { useNavigate } from 'react-router-dom';
+import logo from '@/assets/logo.png';
 
 const Home = () => {
   const [plugStatus, setPlugStatus] = useState(false);
@@ -188,7 +189,7 @@ const Home = () => {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-primary/10 glow-green transition-all hover:scale-110">
-              <Power className="h-5 w-5 text-primary" />
+              <img src={logo} alt="Smart LumoSwitch Logo" className="h-6 w-6 object-contain" />
             </div>
             <span className="font-semibold text-sm sm:text-base">Smart LumoSwitch</span>
           </div>
