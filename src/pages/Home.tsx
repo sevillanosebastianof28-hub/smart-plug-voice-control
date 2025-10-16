@@ -55,7 +55,17 @@ const Home = () => {
 
   const sendCommandToESP32 = async (ip: string, status: boolean) => {
     try {
-      // Replace with actual ESP32 API endpoint
+      // Validate IP format
+      if (!ip || ip === 'null' || !ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+        console.error('Invalid ESP32 IP address:', ip);
+        toast({
+          title: 'Connection Error',
+          description: 'Invalid ESP32 IP. Please configure WiFi settings.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       const response = await fetch(`http://${ip}/toggle`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -63,8 +73,15 @@ const Home = () => {
       });
       
       if (!response.ok) throw new Error('Failed to send command');
+      
+      console.log('Command sent successfully to ESP32');
     } catch (error) {
       console.error('ESP32 communication error:', error);
+      toast({
+        title: 'Connection Failed',
+        description: 'Could not reach ESP32. Check WiFi connection.',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -82,40 +99,60 @@ const Home = () => {
     const recognition = new SpeechRecognition();
     
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true; // Enable interim results for real-time caption
     recognition.lang = 'en-US';
 
     recognition.onstart = () => {
       setIsListening(true);
-      setFeedback('Listening... Say "turn on" or "turn off"');
+      setFeedback('Listening...');
     };
 
     recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript.toLowerCase();
-      setFeedback(`You said: "${transcript}"`);
+      let interimTranscript = '';
+      let finalTranscript = '';
 
-      if (transcript.includes('turn on') || transcript.includes('on')) {
-        const newStatus = true;
-        setPlugStatus(newStatus);
-        localStorage.setItem('plug-status', 'true');
-        setFeedback('Command received: Turning ON');
-        
-        const esp32Ip = localStorage.getItem('esp32-ip');
-        if (esp32Ip) sendCommandToESP32(esp32Ip, newStatus);
-        
-        toast({ title: 'Plug turned ON', description: 'Voice command executed' });
-      } else if (transcript.includes('turn off') || transcript.includes('off')) {
-        const newStatus = false;
-        setPlugStatus(newStatus);
-        localStorage.setItem('plug-status', 'false');
-        setFeedback('Command received: Turning OFF');
-        
-        const esp32Ip = localStorage.getItem('esp32-ip');
-        if (esp32Ip) sendCommandToESP32(esp32Ip, newStatus);
-        
-        toast({ title: 'Plug turned OFF', description: 'Voice command executed' });
-      } else {
-        setFeedback('Command not recognized. Try "turn on" or "turn off"');
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      // Show real-time interim results
+      if (interimTranscript) {
+        setFeedback(`You said: "${interimTranscript}"`);
+      }
+
+      // Process final result
+      if (finalTranscript) {
+        const transcriptLower = finalTranscript.toLowerCase();
+        setFeedback(`You said: "${finalTranscript}"`);
+
+        if (transcriptLower.includes('turn on') || transcriptLower.includes('on')) {
+          const newStatus = true;
+          setPlugStatus(newStatus);
+          localStorage.setItem('plug-status', 'true');
+          setFeedback('Command received: Turning ON');
+          
+          const esp32Ip = localStorage.getItem('esp32-ip');
+          if (esp32Ip) sendCommandToESP32(esp32Ip, newStatus);
+          
+          toast({ title: 'Plug turned ON', description: 'Voice command executed' });
+        } else if (transcriptLower.includes('turn off') || transcriptLower.includes('off')) {
+          const newStatus = false;
+          setPlugStatus(newStatus);
+          localStorage.setItem('plug-status', 'false');
+          setFeedback('Command received: Turning OFF');
+          
+          const esp32Ip = localStorage.getItem('esp32-ip');
+          if (esp32Ip) sendCommandToESP32(esp32Ip, newStatus);
+          
+          toast({ title: 'Plug turned OFF', description: 'Voice command executed' });
+        } else {
+          setFeedback('Command not recognized. Try "turn on" or "turn off"');
+        }
       }
     };
 
@@ -323,7 +360,11 @@ const Home = () => {
                     <span className="text-sm font-semibold text-primary">You're saying:</span>
                   </div>
                   <p className="text-lg sm:text-xl font-medium text-foreground min-h-[32px]">
-                    {feedback.includes('You said:') ? feedback.replace('You said: ', '').replace(/"/g, '') : '...'}
+                    {feedback.includes('You said:') 
+                      ? feedback.replace('You said: ', '').replace(/"/g, '') 
+                      : feedback === 'Listening...' 
+                      ? 'Speak now...' 
+                      : feedback}
                   </p>
                 </div>
               )}
