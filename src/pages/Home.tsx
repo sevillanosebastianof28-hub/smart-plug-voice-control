@@ -12,6 +12,7 @@ const Home = () => {
   const [feedback, setFeedback] = useState('Say "Hey Smart Plug" to start');
   const [wifiDialogOpen, setWifiDialogOpen] = useState(false);
   const [controlMode, setControlMode] = useState<'voice' | 'button'>('button');
+  const [isConnected, setIsConnected] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -20,6 +21,19 @@ const Home = () => {
     if (savedStatus) {
       setPlugStatus(savedStatus === 'true');
     }
+    
+    const esp32Ip = localStorage.getItem('esp32-ip');
+    setIsConnected(!!esp32Ip);
+  }, []);
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const esp32Ip = localStorage.getItem('esp32-ip');
+      setIsConnected(!!esp32Ip);
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const togglePlug = () => {
@@ -173,6 +187,33 @@ const Home = () => {
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 relative z-10">
         <div className="max-w-2xl w-full space-y-8 sm:space-y-12 animate-fade-in">
+          
+          {/* ESP32 Connection Status */}
+          <div className={`bg-card/80 backdrop-blur-sm border rounded-xl p-4 transition-all luminous-border ${
+            isConnected ? 'border-primary/30' : 'border-destructive/30'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-primary animate-pulse' : 'bg-destructive'}`} />
+                <span className="text-sm font-medium">
+                  {isConnected ? 'ESP32 Connected' : 'ESP32 Not Connected'}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setWifiDialogOpen(true)}
+                className="text-xs"
+              >
+                {isConnected ? 'Reconfigure' : 'Setup WiFi'}
+              </Button>
+            </div>
+            {!isConnected && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Please connect to your ESP32 smart plug via WiFi Setup before controlling the device.
+              </p>
+            )}
+          </div>
           {/* Power Button */}
           <div className="flex flex-col items-center space-y-6">
             <button
@@ -274,6 +315,19 @@ const Home = () => {
           {/* Voice Control */}
           {controlMode === 'voice' && (
             <div className="space-y-4 sm:space-y-6 animate-fade-in">
+              {/* Real-time Voice Caption */}
+              {isListening && (
+                <div className="bg-primary/10 border border-primary/30 rounded-xl p-4 sm:p-6 animate-fade-in glow-cyan">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Mic className="h-4 w-4 text-primary animate-pulse" />
+                    <span className="text-sm font-semibold text-primary">You're saying:</span>
+                  </div>
+                  <p className="text-lg sm:text-xl font-medium text-foreground min-h-[32px]">
+                    {feedback.includes('You said:') ? feedback.replace('You said: ', '').replace(/"/g, '') : '...'}
+                  </p>
+                </div>
+              )}
+
               <div className="bg-card/80 backdrop-blur-sm border rounded-xl p-4 sm:p-6 space-y-4 card-glow luminous-border">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base sm:text-lg font-semibold">Voice Control</h3>
@@ -285,9 +339,11 @@ const Home = () => {
                   )}
                 </div>
 
-                <p className="text-xs sm:text-sm text-muted-foreground min-h-[40px] flex items-center transition-all">
-                  {feedback}
-                </p>
+                {!isListening && (
+                  <p className="text-xs sm:text-sm text-muted-foreground min-h-[40px] flex items-center transition-all">
+                    {feedback}
+                  </p>
+                )}
 
                 <Button
                   onClick={startListening}
@@ -313,16 +369,6 @@ const Home = () => {
                 <p className="text-xs sm:text-sm text-muted-foreground text-center">
                   <span className="font-medium text-foreground">Voice Commands:</span>{' '}
                   "turn on" or "turn off"
-                </p>
-              </div>
-
-              {/* ESP32 Connection Info */}
-              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 transition-all">
-                <p className="text-xs text-muted-foreground text-center">
-                  <span className="font-medium text-primary">ESP32 Ready:</span> Commands sent to{' '}
-                  <code className="text-xs bg-background/50 px-1 py-0.5 rounded">
-                    {localStorage.getItem('esp32-ip') || 'Configure via WiFi Setup'}
-                  </code>
                 </p>
               </div>
             </div>
