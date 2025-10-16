@@ -13,7 +13,7 @@ const Home = () => {
   const [wifiDialogOpen, setWifiDialogOpen] = useState(false);
   const [controlMode, setControlMode] = useState<'voice' | 'button'>('button');
   const [isConnected, setIsConnected] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, session, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -66,9 +66,15 @@ const Home = () => {
         return;
       }
 
+      // Get authentication token from current session
+      const authToken = session?.access_token;
+
       const response = await fetch(`http://${ip}/toggle`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+        },
         body: JSON.stringify({ state: status ? 'ON' : 'OFF' })
       });
       

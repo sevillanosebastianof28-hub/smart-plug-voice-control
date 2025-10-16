@@ -11,6 +11,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Wifi } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { z } from 'zod';
+
+const ipSchema = z.string().ip({ version: 'v4', message: 'Invalid IPv4 address' });
 
 interface WiFiSetupDialogProps {
   open: boolean;
@@ -26,6 +29,17 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       toast({
         title: 'IP Required',
         description: 'Please enter your ESP32 IP address',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Validate IP format
+    const validation = ipSchema.safeParse(esp32Ip);
+    if (!validation.success) {
+      toast({
+        title: 'Invalid IP Address',
+        description: 'Please enter a valid IPv4 address (e.g., 192.168.1.100)',
         variant: 'destructive'
       });
       return;

@@ -5,6 +5,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import { Zap } from 'lucide-react';
+import { z } from 'zod';
+
+const signupSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
 
 const Signup = () => {
   const [email, setEmail] = useState('');
@@ -18,13 +31,10 @@ const Signup = () => {
     e.preventDefault();
     setError('');
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    // Validate inputs
+    const validation = signupSchema.safeParse({ email, password, confirmPassword });
+    if (!validation.success) {
+      setError(validation.error.errors[0].message);
       return;
     }
 

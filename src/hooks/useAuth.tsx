@@ -1,14 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-
-interface User {
-  email: string;
-  id: string;
-}
+import { supabase } from '@/integrations/supabase/client';
+import type { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -19,65 +17,74 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('smart-plug-user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
-    const users = JSON.parse(localStorage.getItem('smart-plug-users') || '[]');
-    const foundUser = users.find((u: any) => u.email === email && u.password === password);
-
-    if (foundUser) {
-      const userData = { email: foundUser.email, id: foundUser.id };
-      setUser(userData);
-      localStorage.setItem('smart-plug-user', JSON.stringify(userData));
-      toast({ title: 'Login successful', description: 'Welcome back!' });
-      navigate('/home');
-    } else {
-      throw new Error('Invalid email or password');
-    }
-  };
-
-  const signup = async (email: string, password: string) => {
-    const users = JSON.parse(localStorage.getItem('smart-plug-users') || '[]');
-    
-    if (users.find((u: any) => u.email === email)) {
-      throw new Error('User already exists');
-    }
-
-    const newUser = {
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
-      id: Math.random().toString(36).substr(2, 9)
-    };
+    });
 
-    users.push(newUser);
-    localStorage.setItem('smart-plug-users', JSON.stringify(users));
+    if (error) throw error;
 
-    const userData = { email: newUser.email, id: newUser.id };
-    setUser(userData);
-    localStorage.setItem('smart-plug-user', JSON.stringify(userData));
-    
-    toast({ title: 'Account created', description: 'Welcome to Smart Plug Voice!' });
+    setUser(data.user);
+    setSession(data.session);
+    toast({ title: 'Login successful', description: 'Welcome back!' });
     navigate('/home');
   };
 
-  const logout = () => {
+  const signup = async (email: string, password: string) => {
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+      },
+    });
+
+    if (error) throw error;
+
+    setUser(data.user);
+    setSession(data.session);
+    toast({ 
+      title: 'Account created', 
+      description: 'Welcome to Smart Plug Voice!' 
+    });
+    navigate('/home');
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('smart-plug-user');
+    setSession(null);
     toast({ title: 'Logged out', description: 'See you next time!' });
     navigate('/login');
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, session, login, signup, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
