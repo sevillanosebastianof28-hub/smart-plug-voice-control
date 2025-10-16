@@ -47,16 +47,40 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
 
     setIsConnecting(true);
 
-    // Simulate connection - replace with actual ESP32 API call
-    setTimeout(() => {
+    try {
+      // Test actual connection to ESP32
+      const response = await fetch(`http://${esp32Ip}/status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to connect to ESP32');
+      }
+
+      // Connection successful
       localStorage.setItem('esp32-ip', esp32Ip);
+      
+      // Trigger storage event for other components
+      window.dispatchEvent(new Event('storage'));
+      
       toast({
         title: 'Connected to ESP32',
         description: `Successfully connected to ${esp32Ip}`
       });
+      
       setIsConnecting(false);
       onOpenChange(false);
-    }, 1500);
+    } catch (error) {
+      console.error('ESP32 connection error:', error);
+      toast({
+        title: 'Connection Failed',
+        description: 'Could not reach ESP32. Please verify the IP address and ensure the device is powered on and connected to your network.',
+        variant: 'destructive'
+      });
+      setIsConnecting(false);
+    }
   };
 
   return (

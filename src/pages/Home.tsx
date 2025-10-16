@@ -17,41 +17,32 @@ const Home = () => {
   const { user, session, logout } = useAuth();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const savedStatus = localStorage.getItem('plug-status');
-    if (savedStatus) {
-      setPlugStatus(savedStatus === 'true');
-    }
-    
-    const esp32Ip = localStorage.getItem('esp32-ip');
-    setIsConnected(!!esp32Ip);
-  }, []);
+  const fetchESP32Status = async (ip: string) => {
+    try {
+      if (!ip || ip === 'null' || !ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+        return;
+      }
 
-  useEffect(() => {
-    const handleStorageChange = () => {
-      const esp32Ip = localStorage.getItem('esp32-ip');
-      setIsConnected(!!esp32Ip);
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+      const response = await fetch(`http://${ip}/status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000)
+      });
 
-  const togglePlug = () => {
-    const newStatus = !plugStatus;
-    setPlugStatus(newStatus);
-    localStorage.setItem('plug-status', String(newStatus));
-    
-    // Send command to ESP32 if connected
-    const esp32Ip = localStorage.getItem('esp32-ip');
-    if (esp32Ip) {
-      sendCommandToESP32(esp32Ip, newStatus);
+      if (response.ok) {
+        const data = await response.json();
+        const remoteStatus = data.state === 'ON';
+        
+        // Update local state if different from remote
+        if (remoteStatus !== plugStatus) {
+          setPlugStatus(remoteStatus);
+          localStorage.setItem('plug-status', String(remoteStatus));
+        }
+      }
+    } catch (error) {
+      // Silently fail for polling - don't show toasts for every poll failure
+      console.log('ESP32 status check failed (device may be offline)');
     }
-    
-    toast({
-      title: newStatus ? 'Plug turned ON' : 'Plug turned OFF',
-      description: newStatus ? 'Device is now powered' : 'Device is now off'
-    });
   };
 
   const sendCommandToESP32 = async (ip: string, status: boolean) => {
@@ -82,6 +73,9 @@ const Home = () => {
       if (!response.ok) throw new Error('Failed to send command');
       
       console.log('Command sent successfully to ESP32');
+      
+      // Immediately fetch status after sending command
+      setTimeout(() => fetchESP32Status(ip), 500);
     } catch (error) {
       console.error('ESP32 communication error:', error);
       toast({
@@ -90,6 +84,66 @@ const Home = () => {
         variant: 'destructive'
       });
     }
+  };
+
+  useEffect(() => {
+    const savedStatus = localStorage.getItem('plug-status');
+    if (savedStatus) {
+      setPlugStatus(savedStatus === 'true');
+    }
+    
+    const esp32Ip = localStorage.getItem('esp32-ip');
+    setIsConnected(!!esp32Ip);
+    
+    // Initial status sync
+    if (esp32Ip) {
+      fetchESP32Status(esp32Ip);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const esp32Ip = localStorage.getItem('esp32-ip');
+      setIsConnected(!!esp32Ip);
+      
+      // Fetch status when connection changes
+      if (esp32Ip) {
+        fetchESP32Status(esp32Ip);
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Real-time status polling from ESP32
+  useEffect(() => {
+    const esp32Ip = localStorage.getItem('esp32-ip');
+    if (!esp32Ip) return;
+
+    // Poll ESP32 status every 3 seconds
+    const pollInterval = setInterval(() => {
+      fetchESP32Status(esp32Ip);
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
+  }, [isConnected]);
+
+  const togglePlug = () => {
+    const newStatus = !plugStatus;
+    setPlugStatus(newStatus);
+    localStorage.setItem('plug-status', String(newStatus));
+    
+    // Send command to ESP32 if connected
+    const esp32Ip = localStorage.getItem('esp32-ip');
+    if (esp32Ip) {
+      sendCommandToESP32(esp32Ip, newStatus);
+    }
+    
+    toast({
+      title: newStatus ? 'Plug turned ON' : 'Plug turned OFF',
+      description: newStatus ? 'Device is now powered' : 'Device is now off'
+    });
   };
 
   const startListening = () => {
