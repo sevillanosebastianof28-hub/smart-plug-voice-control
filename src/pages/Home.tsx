@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { Power, Mic, MicOff, Settings, LogOut } from 'lucide-react';
+import { Power, Mic, MicOff, Wifi, LogOut } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { WiFiSetupDialog } from '@/components/WiFiSetupDialog';
 
 const Home = () => {
   const [plugStatus, setPlugStatus] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [feedback, setFeedback] = useState('Say "Hey Smart Plug" to start');
+  const [wifiDialogOpen, setWifiDialogOpen] = useState(false);
+  const [controlMode, setControlMode] = useState<'voice' | 'button'>('button');
   const { user, logout } = useAuth();
 
   useEffect(() => {
@@ -21,10 +24,32 @@ const Home = () => {
     const newStatus = !plugStatus;
     setPlugStatus(newStatus);
     localStorage.setItem('plug-status', String(newStatus));
+    
+    // Send command to ESP32 if connected
+    const esp32Ip = localStorage.getItem('esp32-ip');
+    if (esp32Ip) {
+      sendCommandToESP32(esp32Ip, newStatus);
+    }
+    
     toast({
       title: newStatus ? 'Plug turned ON' : 'Plug turned OFF',
       description: newStatus ? 'Device is now powered' : 'Device is now off'
     });
+  };
+
+  const sendCommandToESP32 = async (ip: string, status: boolean) => {
+    try {
+      // Replace with actual ESP32 API endpoint
+      const response = await fetch(`http://${ip}/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: status ? 'ON' : 'OFF' })
+      });
+      
+      if (!response.ok) throw new Error('Failed to send command');
+    } catch (error) {
+      console.error('ESP32 communication error:', error);
+    }
   };
 
   const startListening = () => {
@@ -54,14 +79,24 @@ const Home = () => {
       setFeedback(`You said: "${transcript}"`);
 
       if (transcript.includes('turn on') || transcript.includes('on')) {
-        setPlugStatus(true);
+        const newStatus = true;
+        setPlugStatus(newStatus);
         localStorage.setItem('plug-status', 'true');
         setFeedback('Command received: Turning ON');
+        
+        const esp32Ip = localStorage.getItem('esp32-ip');
+        if (esp32Ip) sendCommandToESP32(esp32Ip, newStatus);
+        
         toast({ title: 'Plug turned ON', description: 'Voice command executed' });
       } else if (transcript.includes('turn off') || transcript.includes('off')) {
-        setPlugStatus(false);
+        const newStatus = false;
+        setPlugStatus(newStatus);
         localStorage.setItem('plug-status', 'false');
         setFeedback('Command received: Turning OFF');
+        
+        const esp32Ip = localStorage.getItem('esp32-ip');
+        if (esp32Ip) sendCommandToESP32(esp32Ip, newStatus);
+        
         toast({ title: 'Plug turned OFF', description: 'Voice command executed' });
       } else {
         setFeedback('Command not recognized. Try "turn on" or "turn off"');
@@ -100,8 +135,13 @@ const Home = () => {
             <span className="text-sm text-muted-foreground hidden sm:inline">
               {user?.email}
             </span>
-            <Button variant="ghost" size="icon" title="Settings">
-              <Settings className="h-5 w-5" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setWifiDialogOpen(true)}
+              title="WiFi Setup"
+            >
+              <Wifi className="h-5 w-5" />
             </Button>
             <Button variant="ghost" size="icon" onClick={logout} title="Logout">
               <LogOut className="h-5 w-5" />
@@ -140,52 +180,122 @@ const Home = () => {
             </div>
           </div>
 
+          {/* Control Mode Switcher */}
+          <div className="flex gap-2 p-1 bg-card border border-border rounded-lg">
+            <Button
+              variant={controlMode === 'button' ? 'default' : 'ghost'}
+              className="flex-1"
+              onClick={() => setControlMode('button')}
+            >
+              <Power className="mr-2 h-4 w-4" />
+              Button Control
+            </Button>
+            <Button
+              variant={controlMode === 'voice' ? 'default' : 'ghost'}
+              className="flex-1"
+              onClick={() => setControlMode('voice')}
+            >
+              <Mic className="mr-2 h-4 w-4" />
+              Voice Control
+            </Button>
+          </div>
+
+          {/* Button Control */}
+          {controlMode === 'button' && (
+            <div className="space-y-4">
+              <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+                <h3 className="text-lg font-semibold text-center">Manual Control</h3>
+                <p className="text-sm text-muted-foreground text-center">
+                  Use the buttons below to control your smart plug
+                </p>
+                
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <Button
+                    onClick={() => {
+                      setPlugStatus(true);
+                      localStorage.setItem('plug-status', 'true');
+                      const esp32Ip = localStorage.getItem('esp32-ip');
+                      if (esp32Ip) sendCommandToESP32(esp32Ip, true);
+                      toast({ title: 'Plug turned ON' });
+                    }}
+                    disabled={plugStatus}
+                    className="h-20 text-lg"
+                    variant={plugStatus ? 'secondary' : 'default'}
+                  >
+                    <Power className="mr-2 h-6 w-6" />
+                    Turn ON
+                  </Button>
+                  
+                  <Button
+                    onClick={() => {
+                      setPlugStatus(false);
+                      localStorage.setItem('plug-status', 'false');
+                      const esp32Ip = localStorage.getItem('esp32-ip');
+                      if (esp32Ip) sendCommandToESP32(esp32Ip, false);
+                      toast({ title: 'Plug turned OFF' });
+                    }}
+                    disabled={!plugStatus}
+                    className="h-20 text-lg"
+                    variant={!plugStatus ? 'secondary' : 'default'}
+                  >
+                    <Power className="mr-2 h-6 w-6" />
+                    Turn OFF
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Voice Control */}
-          <div className="space-y-6">
-            <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Voice Control</h3>
-                {isListening && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                    <span className="text-sm text-primary">Listening...</span>
-                  </div>
-                )}
+          {controlMode === 'voice' && (
+            <div className="space-y-6">
+              <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Voice Control</h3>
+                  {isListening && (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                      <span className="text-sm text-primary">Listening...</span>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-sm text-muted-foreground min-h-[40px] flex items-center">
+                  {feedback}
+                </p>
+
+                <Button
+                  onClick={startListening}
+                  disabled={isListening}
+                  className={`w-full ${isListening ? 'glow-cyan' : ''}`}
+                  size="lg"
+                >
+                  {isListening ? (
+                    <>
+                      <MicOff className="mr-2 h-5 w-5" />
+                      Listening...
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="mr-2 h-5 w-5" />
+                      Start Voice Command
+                    </>
+                  )}
+                </Button>
               </div>
 
-              <p className="text-sm text-muted-foreground min-h-[40px] flex items-center">
-                {feedback}
-              </p>
-
-              <Button
-                onClick={startListening}
-                disabled={isListening}
-                className={`w-full ${isListening ? 'glow-cyan' : ''}`}
-                size="lg"
-              >
-                {isListening ? (
-                  <>
-                    <MicOff className="mr-2 h-5 w-5" />
-                    Listening...
-                  </>
-                ) : (
-                  <>
-                    <Mic className="mr-2 h-5 w-5" />
-                    Start Voice Command
-                  </>
-                )}
-              </Button>
+              <div className="bg-card/50 border border-border/50 rounded-lg p-4">
+                <p className="text-sm text-muted-foreground text-center">
+                  <span className="font-medium text-foreground">Voice Commands:</span>{' '}
+                  "turn on" or "turn off"
+                </p>
+              </div>
             </div>
-
-            <div className="bg-card/50 border border-border/50 rounded-lg p-4">
-              <p className="text-sm text-muted-foreground text-center">
-                <span className="font-medium text-foreground">Voice Commands:</span>{' '}
-                "turn on" or "turn off"
-              </p>
-            </div>
-          </div>
+          )}
         </div>
       </main>
+
+      <WiFiSetupDialog open={wifiDialogOpen} onOpenChange={setWifiDialogOpen} />
     </div>
   );
 };
