@@ -188,8 +188,8 @@ const Home = () => {
       <header className="border-b border-border p-4 transition-all relative z-10 bg-background/80 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-primary/10 glow-green transition-all hover:scale-110">
-              <img src={logo} alt="Smart LumoSwitch Logo" className="h-6 w-6 object-contain" />
+            <div className="p-1.5 rounded-lg bg-primary/10 glow-green transition-all hover:scale-110">
+              <img src={logo} alt="Smart LumoSwitch Logo" className="h-4 w-4 object-contain" />
             </div>
             <span className="font-semibold text-sm sm:text-base">Smart LumoSwitch</span>
           </div>
