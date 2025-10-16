@@ -6,12 +6,12 @@ const About = () => {
   const navigate = useNavigate();
 
   const developers = [
-    'Name 1',
-    'Name 2',
-    'Name 3',
-    'Name 4',
-    'Name 5',
-    'Jake Dela Cruz'
+    'Balmist John Balansag',
+    'Erika Ramos',
+    'Jonathan Lusica',
+    'Jake Dela Cruz',
+    'Jan Harold Feudo',
+    'Jesryle Navarro
   ];
 
   return (
