@@ -118,6 +118,7 @@ const Home = () => {
     if (esp32Ip) {
       fetchESP32Status(esp32Ip);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
