@@ -24,6 +24,7 @@ const About = () => {
             variant="ghost"
             size="icon"
             onClick={() => navigate("/home")}
+            aria-label="Back to home"
             className="transition-transform hover:scale-110"
           >
             <ArrowLeft className="h-5 w-5" />

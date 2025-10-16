@@ -213,7 +213,7 @@ const Home = () => {
         const transcriptLower = finalTranscript.toLowerCase();
         setFeedback(`You said: "${finalTranscript}"`);
 
-        if (transcriptLower.includes('turn on') || transcriptLower.includes('on')) {
+        if (transcriptLower.includes('turn on')) {
           const newStatus = true;
           setPlugStatus(newStatus);
           localStorage.setItem('plug-status', 'true');
@@ -223,7 +223,7 @@ const Home = () => {
           if (esp32Ip) sendCommandToESP32(esp32Ip, newStatus);
           
           toast({ title: 'Plug turned ON', description: 'Voice command executed' });
-        } else if (transcriptLower.includes('turn off') || transcriptLower.includes('off')) {
+        } else if (transcriptLower.includes('turn off')) {
           const newStatus = false;
           setPlugStatus(newStatus);
           localStorage.setItem('plug-status', 'false');
@@ -278,6 +278,7 @@ const Home = () => {
               size="icon" 
               onClick={() => navigate('/about')}
               title="About"
+              aria-label="About page"
               className="transition-transform hover:scale-110"
             >
               <Info className="h-5 w-5" />
@@ -287,6 +288,7 @@ const Home = () => {
               size="icon" 
               onClick={() => setWifiDialogOpen(true)}
               title="WiFi Setup"
+              aria-label="Open WiFi setup"
               className="transition-transform hover:scale-110"
             >
               <Wifi className="h-5 w-5" />
@@ -296,6 +298,7 @@ const Home = () => {
               size="icon" 
               onClick={logout} 
               title="Logout"
+              aria-label="Logout"
               className="transition-transform hover:scale-110"
             >
               <LogOut className="h-5 w-5" />
@@ -334,10 +337,12 @@ const Home = () => {
               </p>
             )}
           </div>
-          {/* Power Button */}
           <div className="flex flex-col items-center space-y-6">
-            <button
+            <Button
               onClick={togglePlug}
+              variant="ghost"
+              size="icon"
+              aria-label={plugStatus ? 'Turn plug off' : 'Turn plug on'}
               className={`relative w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 rounded-full transition-all duration-500 hover:scale-105 ${
                 plugStatus
                   ? 'bg-primary glow-green scale-105'
@@ -349,7 +354,7 @@ const Home = () => {
                   plugStatus ? 'text-primary-foreground rotate-180' : 'text-muted-foreground'
                 }`}
               />
-            </button>
+            </Button>
 
             <div className="text-center space-y-2 transition-all">
               <h2 className={`text-2xl sm:text-3xl md:text-4xl font-bold transition-all ${plugStatus ? 'text-glow' : ''}`}>
