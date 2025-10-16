@@ -1,17 +1,17 @@
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, Power, Mic } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Power, Mic } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const About = () => {
   const navigate = useNavigate();
 
   const developers = [
-    'Balmist John Balansag',
-    'Erika Ramos',
-    'Jonathan Lusica',
-    'Jake Dela Cruz',
-    'Jan Harold Feudo',
-    'Jesryle Navarro
+    "Balmist John Balansag",
+    "Erika Ramos",
+    "Jonathan Lusica",
+    "Jake Dela Cruz",
+    "Jan Harold Feudo",
+    "Jesryle Navarro",
   ];
 
   return (
@@ -22,7 +22,7 @@ const About = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate('/home')}
+            onClick={() => navigate("/home")}
             className="transition-transform hover:scale-110"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -42,18 +42,15 @@ const About = () => {
         <div className="max-w-2xl w-full space-y-6 animate-fade-in relative z-10">
           {/* App Title */}
           <div className="text-center space-y-2">
-            <h1 className="text-3xl sm:text-4xl font-bold text-glow">
-              About Smart LumoSwitch
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              Simple. Smart. Voice-Controlled.
-            </p>
+            <h1 className="text-3xl sm:text-4xl font-bold text-glow">About Smart LumoSwitch</h1>
+            <p className="text-muted-foreground text-sm">Simple. Smart. Voice-Controlled.</p>
           </div>
 
           {/* About Section */}
           <div className="bg-card/80 backdrop-blur-sm border rounded-xl p-6 space-y-4 card-glow luminous-border">
             <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
-              Smart LumoSwitch is designed to simply control your smart plug through an intuitive app with two easy control methods:
+              Smart LumoSwitch is designed to simply control your smart plug through an intuitive app with two easy
+              control methods:
             </p>
 
             <div className="grid sm:grid-cols-2 gap-3">
@@ -62,9 +59,7 @@ const About = () => {
                   <Power className="h-4 w-4 text-primary" />
                   <h3 className="font-semibold text-foreground text-sm">Switch Control</h3>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Instant ON/OFF control
-                </p>
+                <p className="text-xs text-muted-foreground">Instant ON/OFF control</p>
               </div>
 
               <div className="bg-background/50 rounded-lg p-3 border border-border/50 transition-all hover:border-primary/30">
@@ -72,9 +67,7 @@ const About = () => {
                   <Mic className="h-4 w-4 text-primary" />
                   <h3 className="font-semibold text-foreground text-sm">Voice Control</h3>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Hands-free operation
-                </p>
+                <p className="text-xs text-muted-foreground">Hands-free operation</p>
               </div>
             </div>
           </div>
@@ -82,7 +75,7 @@ const About = () => {
           {/* Developers Section */}
           <div className="bg-card/80 backdrop-blur-sm border rounded-xl p-6 space-y-4 card-glow luminous-border">
             <h2 className="text-lg font-semibold text-center">Development Team</h2>
-            
+
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {developers.map((developer, index) => (
                 <div
@@ -95,19 +88,13 @@ const About = () => {
             </div>
 
             <div className="pt-3 border-t border-border text-center">
-              <p className="text-xs text-muted-foreground">
-                © 2025 Smart LumoSwitch Team
-              </p>
+              <p className="text-xs text-muted-foreground">© 2025 Smart LumoSwitch Team</p>
             </div>
           </div>
 
           {/* Back Button */}
           <div className="flex justify-center">
-            <Button
-              onClick={() => navigate('/home')}
-              size="lg"
-              className="transition-all hover:scale-105 glow-green"
-            >
+            <Button onClick={() => navigate("/home")} size="lg" className="transition-all hover:scale-105 glow-green">
               <ArrowLeft className="mr-2 h-5 w-5" />
               Back to Home
             </Button>
