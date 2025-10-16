@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,16 @@ interface WiFiSetupDialogProps {
 export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
   const [esp32Ip, setEsp32Ip] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
+  const [currentIp, setCurrentIp] = useState<string | null>(null);
+
+  // Update current IP when dialog opens
+  useEffect(() => {
+    if (open) {
+      const savedIp = localStorage.getItem('esp32-ip');
+      setCurrentIp(savedIp);
+      setEsp32Ip('');
+    }
+  }, [open]);
 
   const handleConnect = async () => {
     if (!esp32Ip) {
@@ -61,6 +71,7 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
 
       // Connection successful
       localStorage.setItem('esp32-ip', esp32Ip);
+      setCurrentIp(esp32Ip);
       
       // Trigger storage event for other components
       window.dispatchEvent(new Event('storage'));
@@ -121,11 +132,11 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
             {isConnecting ? 'Connecting...' : 'Connect to Device'}
           </Button>
 
-          {localStorage.getItem('esp32-ip') && (
+          {currentIp && (
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
               <p className="text-sm">
                 <span className="font-medium">Current Device:</span>{' '}
-                <span className="text-primary">{localStorage.getItem('esp32-ip')}</span>
+                <span className="text-primary">{currentIp}</span>
               </p>
             </div>
           )}

@@ -76,11 +76,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    toast({ title: 'Logged out', description: 'See you next time!' });
-    navigate('/login');
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
+      toast({ title: 'Logged out', description: 'See you next time!' });
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast({ 
+        title: 'Logout failed', 
+        description: 'There was an error logging out. Please try again.',
+        variant: 'destructive'
+      });
+    }
   };
 
   return (

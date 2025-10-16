@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { Power, Mic, MicOff, Wifi, LogOut, Info } from 'lucide-react';
@@ -16,8 +16,16 @@ const Home = () => {
   const [isConnected, setIsConnected] = useState(false);
   const { user, session, logout } = useAuth();
   const navigate = useNavigate();
+  const isMountedRef = useRef(true);
 
-  const fetchESP32Status = async (ip: string) => {
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const fetchESP32Status = useCallback(async (ip: string) => {
     try {
       if (!ip || ip === 'null' || !ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
         return;
@@ -33,19 +41,24 @@ const Home = () => {
         const data = await response.json();
         const remoteStatus = data.state === 'ON';
         
-        // Update local state if different from remote
-        if (remoteStatus !== plugStatus) {
-          setPlugStatus(remoteStatus);
-          localStorage.setItem('plug-status', String(remoteStatus));
+        // Update local state if different from remote (only if component is still mounted)
+        if (isMountedRef.current) {
+          setPlugStatus(prevStatus => {
+            if (remoteStatus !== prevStatus) {
+              localStorage.setItem('plug-status', String(remoteStatus));
+              return remoteStatus;
+            }
+            return prevStatus;
+          });
         }
       }
     } catch (error) {
       // Silently fail for polling - don't show toasts for every poll failure
       console.log('ESP32 status check failed (device may be offline)');
     }
-  };
+  }, []);
 
-  const sendCommandToESP32 = async (ip: string, status: boolean) => {
+  const sendCommandToESP32 = useCallback(async (ip: string, status: boolean) => {
     try {
       // Validate IP format
       if (!ip || ip === 'null' || !ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
@@ -74,17 +87,23 @@ const Home = () => {
       
       console.log('Command sent successfully to ESP32');
       
-      // Immediately fetch status after sending command
-      setTimeout(() => fetchESP32Status(ip), 500);
+      // Immediately fetch status after sending command (only if mounted)
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          fetchESP32Status(ip);
+        }
+      }, 500);
     } catch (error) {
       console.error('ESP32 communication error:', error);
-      toast({
-        title: 'Connection Failed',
-        description: 'Could not reach ESP32. Check WiFi connection.',
-        variant: 'destructive'
-      });
+      if (isMountedRef.current) {
+        toast({
+          title: 'Connection Failed',
+          description: 'Could not reach ESP32. Check WiFi connection.',
+          variant: 'destructive'
+        });
+      }
     }
-  };
+  }, [session?.access_token, fetchESP32Status]);
 
   useEffect(() => {
     const savedStatus = localStorage.getItem('plug-status');
@@ -114,20 +133,22 @@ const Home = () => {
     
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [fetchESP32Status]);
 
   // Real-time status polling from ESP32
   useEffect(() => {
     const esp32Ip = localStorage.getItem('esp32-ip');
-    if (!esp32Ip) return;
+    if (!esp32Ip || !isConnected) return;
 
     // Poll ESP32 status every 3 seconds
     const pollInterval = setInterval(() => {
-      fetchESP32Status(esp32Ip);
+      if (isMountedRef.current) {
+        fetchESP32Status(esp32Ip);
+      }
     }, 3000);
 
     return () => clearInterval(pollInterval);
-  }, [isConnected]);
+  }, [isConnected, fetchESP32Status]);
 
   const togglePlug = () => {
     const newStatus = !plugStatus;
