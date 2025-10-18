@@ -14,9 +14,11 @@ const Home = () => {
   const [wifiDialogOpen, setWifiDialogOpen] = useState(false);
   const [controlMode, setControlMode] = useState<'voice' | 'button'>('button');
   const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { user, session, logout } = useAuth();
   const navigate = useNavigate();
   const isMountedRef = useRef(true);
+  const lastCommandTimeRef = useRef(0);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -39,7 +41,7 @@ const Home = () => {
 
       if (response.ok) {
         const data = await response.json();
-        const remoteStatus = data.state === 'ON';
+        const remoteStatus = data.status === 'on';
         
         // Update local state if different from remote (only if component is still mounted)
         if (isMountedRef.current) {
@@ -51,6 +53,7 @@ const Home = () => {
             return prevStatus;
           });
         }
+        return data;
       }
     } catch (error) {
       // Silently fail for polling - don't show toasts for every poll failure
@@ -58,7 +61,19 @@ const Home = () => {
     }
   }, []);
 
-  const sendCommandToESP32 = useCallback(async (ip: string, status: boolean) => {
+  const sendCommandToESP32 = useCallback(async (ip: string, status: boolean, retryCount = 0): Promise<boolean> => {
+    // Rate limiting: prevent spam (2 second minimum between requests)
+    const now = Date.now();
+    if (now - lastCommandTimeRef.current < 2000) {
+      toast({
+        title: 'Too Fast',
+        description: 'Please wait 2 seconds between commands',
+        variant: 'destructive'
+      });
+      return false;
+    }
+    lastCommandTimeRef.current = now;
+
     try {
       // Validate IP format
       if (!ip || ip === 'null' || !ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
@@ -68,42 +83,52 @@ const Home = () => {
           description: 'Invalid ESP32 IP. Please configure WiFi settings.',
           variant: 'destructive'
         });
-        return;
+        return false;
       }
 
-      // Get authentication token from current session
-      const authToken = session?.access_token;
+      setIsLoading(true);
 
-      const response = await fetch(`http://${ip}/toggle`, {
-        method: 'POST',
+      const response = await fetch(`http://${ip}/control?status=${status ? 'on' : 'off'}`, {
+        method: 'GET',
         headers: { 
-          'Content-Type': 'application/json',
-          ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ state: status ? 'ON' : 'OFF' })
+        signal: AbortSignal.timeout(5000)
       });
       
       if (!response.ok) throw new Error('Failed to send command');
       
-      console.log('Command sent successfully to ESP32');
+      const data = await response.json();
+      console.log('Command sent successfully to ESP32:', data);
       
-      // Immediately fetch status after sending command (only if mounted)
-      setTimeout(() => {
-        if (isMountedRef.current) {
-          fetchESP32Status(ip);
-        }
-      }, 500);
+      // Verify the response
+      if (data.status === (status ? 'on' : 'off')) {
+        setIsLoading(false);
+        return true;
+      } else {
+        throw new Error('Status mismatch');
+      }
     } catch (error) {
       console.error('ESP32 communication error:', error);
+      
+      // Retry once on failure
+      if (retryCount === 0) {
+        console.log('Retrying command...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return sendCommandToESP32(ip, status, 1);
+      }
+      
       if (isMountedRef.current) {
+        setIsLoading(false);
         toast({
           title: 'Connection Failed',
-          description: 'Could not reach ESP32. Check WiFi connection.',
+          description: '⚠️ Unable to reach the ESP32. Make sure your device is on the same Wi-Fi network.',
           variant: 'destructive'
         });
       }
+      return false;
     }
-  }, [session?.access_token, fetchESP32Status]);
+  }, []);
 
   useEffect(() => {
     const savedStatus = localStorage.getItem('plug-status');
@@ -151,7 +176,7 @@ const Home = () => {
     return () => clearInterval(pollInterval);
   }, [isConnected, fetchESP32Status]);
 
-  const togglePlug = () => {
+  const togglePlug = async () => {
     const newStatus = !plugStatus;
     setPlugStatus(newStatus);
     localStorage.setItem('plug-status', String(newStatus));
@@ -159,13 +184,19 @@ const Home = () => {
     // Send command to ESP32 if connected
     const esp32Ip = localStorage.getItem('esp32-ip');
     if (esp32Ip) {
-      sendCommandToESP32(esp32Ip, newStatus);
+      const success = await sendCommandToESP32(esp32Ip, newStatus);
+      if (success) {
+        toast({
+          title: newStatus ? '✅ LED is ON' : '💤 LED is OFF',
+          description: newStatus ? 'Device is now powered' : 'Device is now off'
+        });
+      }
+    } else {
+      toast({
+        title: newStatus ? '✅ LED is ON' : '💤 LED is OFF',
+        description: newStatus ? 'Device is now powered' : 'Device is now off'
+      });
     }
-    
-    toast({
-      title: newStatus ? 'Plug turned ON' : 'Plug turned OFF',
-      description: newStatus ? 'Device is now powered' : 'Device is now off'
-    });
   };
 
   const startListening = () => {
@@ -190,7 +221,7 @@ const Home = () => {
       setFeedback('Listening...');
     };
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = async (event: any) => {
       let interimTranscript = '';
       let finalTranscript = '';
 
@@ -210,31 +241,106 @@ const Home = () => {
 
       // Process final result
       if (finalTranscript) {
-        const transcriptLower = finalTranscript.toLowerCase();
+        const transcriptLower = finalTranscript.toLowerCase().trim();
         setFeedback(`You said: "${finalTranscript}"`);
 
-        if (transcriptLower.includes('turn on')) {
+        const esp32Ip = localStorage.getItem('esp32-ip');
+        
+        // Check for "turn on" commands
+        if (
+          transcriptLower.includes('turn on') || 
+          transcriptLower.includes('switch on') ||
+          transcriptLower.includes('activate') ||
+          transcriptLower === 'on'
+        ) {
+          setFeedback('Sure! Turning on the LED now...');
           const newStatus = true;
           setPlugStatus(newStatus);
           localStorage.setItem('plug-status', 'true');
-          setFeedback('Command received: Turning ON');
           
-          const esp32Ip = localStorage.getItem('esp32-ip');
-          if (esp32Ip) sendCommandToESP32(esp32Ip, newStatus);
-          
-          toast({ title: 'Plug turned ON', description: 'Voice command executed' });
-        } else if (transcriptLower.includes('turn off')) {
+          if (esp32Ip) {
+            const success = await sendCommandToESP32(esp32Ip, newStatus);
+            if (success) {
+              setFeedback('✅ The LED is now on.');
+              toast({ 
+                title: '✅ LED is ON', 
+                description: 'Voice command executed successfully' 
+              });
+            }
+          } else {
+            toast({ 
+              title: '✅ LED is ON', 
+              description: 'Voice command executed (offline mode)' 
+            });
+          }
+        } 
+        // Check for "turn off" commands
+        else if (
+          transcriptLower.includes('turn off') || 
+          transcriptLower.includes('switch off') ||
+          transcriptLower.includes('deactivate') ||
+          transcriptLower === 'off'
+        ) {
+          setFeedback('Sure! Turning off the LED now...');
           const newStatus = false;
           setPlugStatus(newStatus);
           localStorage.setItem('plug-status', 'false');
-          setFeedback('Command received: Turning OFF');
           
-          const esp32Ip = localStorage.getItem('esp32-ip');
-          if (esp32Ip) sendCommandToESP32(esp32Ip, newStatus);
+          if (esp32Ip) {
+            const success = await sendCommandToESP32(esp32Ip, newStatus);
+            if (success) {
+              setFeedback('💤 The LED is now off.');
+              toast({ 
+                title: '💤 LED is OFF', 
+                description: 'Voice command executed successfully' 
+              });
+            }
+          } else {
+            toast({ 
+              title: '💤 LED is OFF', 
+              description: 'Voice command executed (offline mode)' 
+            });
+          }
+        }
+        // Check for status commands
+        else if (
+          transcriptLower.includes('status') ||
+          transcriptLower.includes('check') ||
+          transcriptLower.includes('is the led') ||
+          transcriptLower.includes('is the light') ||
+          transcriptLower.includes('what') && transcriptLower.includes('led')
+        ) {
+          setFeedback('Checking LED status...');
           
-          toast({ title: 'Plug turned OFF', description: 'Voice command executed' });
-        } else {
-          setFeedback('Command not recognized. Try "turn on" or "turn off"');
+          if (esp32Ip) {
+            const statusData = await fetchESP32Status(esp32Ip);
+            if (statusData) {
+              const currentStatus = statusData.status === 'on';
+              const statusText = currentStatus ? 'on' : 'off';
+              const emoji = currentStatus ? '💡' : '💤';
+              setFeedback(`${emoji} The LED is currently ${statusText}.`);
+              toast({ 
+                title: `LED Status: ${statusText.toUpperCase()}`,
+                description: `${emoji} The LED is currently ${statusText}.`
+              });
+            }
+          } else {
+            const localStatus = plugStatus ? 'on' : 'off';
+            const emoji = plugStatus ? '💡' : '💤';
+            setFeedback(`${emoji} The LED is currently ${localStatus} (offline mode).`);
+            toast({ 
+              title: `LED Status: ${localStatus.toUpperCase()}`,
+              description: `${emoji} The LED is currently ${localStatus} (offline mode).`
+            });
+          }
+        }
+        else {
+          setFeedback('Command not recognized. Try: "turn on", "turn off", or "check status"');
+          toast({
+            title: 'Command Not Recognized',
+            description: 'Try: "turn on the light", "turn off", or "check status"',
+            variant: 'destructive'
+          });
         }
       }
     };
@@ -247,7 +353,9 @@ const Home = () => {
     recognition.onend = () => {
       setIsListening(false);
       setTimeout(() => {
-        if (feedback.includes('Command received')) {
+        if (feedback.includes('✅') || feedback.includes('💤') || feedback.includes('💡')) {
+          // Keep the success message visible
+        } else if (!feedback.includes('Command')) {
           setFeedback('Say "Hey Smart Plug" to start');
         }
       }, 3000);
@@ -358,10 +466,15 @@ const Home = () => {
 
             <div className="text-center space-y-2 transition-all">
               <h2 className={`text-2xl sm:text-3xl md:text-4xl font-bold transition-all ${plugStatus ? 'text-glow' : ''}`}>
-                Plug is {plugStatus ? 'ON' : 'OFF'}
+                {isLoading ? 'Sending...' : `Plug is ${plugStatus ? 'ON' : 'OFF'}`}
               </h2>
               <p className="text-sm sm:text-base text-muted-foreground">
-                {plugStatus ? 'Device is currently powered' : 'Device is currently off'}
+                {isLoading 
+                  ? '⏳ Communicating with ESP32...' 
+                  : plugStatus 
+                    ? '✅ Device is currently powered' 
+                    : '💤 Device is currently off'
+                }
               </p>
               <p className="text-xs text-muted-foreground/70">
                 {controlMode === 'button' ? 'Tap the button to toggle' : 'Use voice commands below'}
@@ -402,35 +515,47 @@ const Home = () => {
                 
                 <div className="grid grid-cols-2 gap-3 sm:gap-4 pt-2">
                   <Button
-                    onClick={() => {
+                    onClick={async () => {
                       setPlugStatus(true);
                       localStorage.setItem('plug-status', 'true');
                       const esp32Ip = localStorage.getItem('esp32-ip');
-                      if (esp32Ip) sendCommandToESP32(esp32Ip, true);
-                      toast({ title: 'Plug turned ON' });
+                      if (esp32Ip) {
+                        const success = await sendCommandToESP32(esp32Ip, true);
+                        if (success) {
+                          toast({ title: '✅ LED is ON', description: 'Device is now powered' });
+                        }
+                      } else {
+                        toast({ title: '✅ LED is ON', description: 'Device is now powered' });
+                      }
                     }}
-                    disabled={plugStatus}
+                    disabled={plugStatus || isLoading}
                     className="h-16 sm:h-20 text-sm sm:text-lg transition-all hover:scale-105"
                     variant={plugStatus ? 'secondary' : 'default'}
                   >
                     <Power className="mr-1 sm:mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-                    Turn ON
+                    {isLoading && !plugStatus ? 'Sending...' : 'Turn ON'}
                   </Button>
                   
                   <Button
-                    onClick={() => {
+                    onClick={async () => {
                       setPlugStatus(false);
                       localStorage.setItem('plug-status', 'false');
                       const esp32Ip = localStorage.getItem('esp32-ip');
-                      if (esp32Ip) sendCommandToESP32(esp32Ip, false);
-                      toast({ title: 'Plug turned OFF' });
+                      if (esp32Ip) {
+                        const success = await sendCommandToESP32(esp32Ip, false);
+                        if (success) {
+                          toast({ title: '💤 LED is OFF', description: 'Device is now off' });
+                        }
+                      } else {
+                        toast({ title: '💤 LED is OFF', description: 'Device is now off' });
+                      }
                     }}
-                    disabled={!plugStatus}
+                    disabled={!plugStatus || isLoading}
                     className="h-16 sm:h-20 text-sm sm:text-lg transition-all hover:scale-105"
                     variant={!plugStatus ? 'secondary' : 'default'}
                   >
                     <Power className="mr-1 sm:mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-                    Turn OFF
+                    {isLoading && plugStatus ? 'Sending...' : 'Turn OFF'}
                   </Button>
                 </div>
               </div>
@@ -497,7 +622,7 @@ const Home = () => {
               <div className="bg-card/50 border border-border/50 rounded-lg p-3 sm:p-4 transition-all luminous-border">
                 <p className="text-xs sm:text-sm text-muted-foreground text-center">
                   <span className="font-medium text-foreground">Voice Commands:</span>{' '}
-                  "turn on" or "turn off"
+                  "turn on the light", "turn off", "activate", "deactivate", "check status"
                 </p>
               </div>
             </div>
