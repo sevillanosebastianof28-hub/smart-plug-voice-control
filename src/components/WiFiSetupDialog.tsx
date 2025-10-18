@@ -25,6 +25,8 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [currentIp, setCurrentIp] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<string[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [foundDevices, setFoundDevices] = useState<string[]>([]);
 
   // Update current IP when dialog opens
   useEffect(() => {
@@ -34,8 +36,93 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       // Set default to new ESP32 IP
       setEsp32Ip(savedIp || '192.168.254.118');
       setTestResults([]);
+      setFoundDevices([]);
     }
   }, [open]);
+
+  const scanForESP32 = async () => {
+    setIsScanning(true);
+    setTestResults(['🔍 Scanning local network for ESP32 devices...']);
+    const found: string[] = [];
+    
+    // Get the base IP from current network (assume 192.168.x.x)
+    const baseIPs = [
+      '192.168.1.',
+      '192.168.0.',
+      '192.168.254.',
+      '192.168.100.',
+      '10.0.0.'
+    ];
+    
+    // Common IP ranges to check
+    const commonIPs = [100, 101, 102, 110, 111, 112, 118, 150, 200];
+    
+    let checkedCount = 0;
+    const totalToCheck = baseIPs.length * commonIPs.length;
+    
+    for (const base of baseIPs) {
+      for (const last of commonIPs) {
+        const testIp = `${base}${last}`;
+        checkedCount++;
+        
+        setTestResults([
+          '🔍 Scanning local network for ESP32 devices...',
+          `📡 Checked ${checkedCount}/${totalToCheck} addresses`,
+          `🔎 Currently testing: ${testIp}`,
+          ...found.map(ip => `✅ Found: ${ip}`)
+        ]);
+        
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 1000);
+          
+          const response = await fetch(`http://${testIp}/status`, {
+            method: 'GET',
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (response.ok) {
+            const data = await response.json();
+            // Check if it looks like our ESP32 (has "status" field)
+            if (data && 'status' in data) {
+              found.push(testIp);
+              setFoundDevices(prev => [...prev, testIp]);
+            }
+          }
+        } catch {
+          // Ignore errors, just move to next IP
+        }
+      }
+    }
+    
+    setTestResults([
+      `✅ Scan complete! Checked ${totalToCheck} addresses`,
+      '',
+      found.length > 0 
+        ? `🎉 Found ${found.length} ESP32 device(s):`
+        : '❌ No ESP32 devices found',
+      ...found.map(ip => `  • ${ip}`),
+      '',
+      found.length === 0 ? '💡 Tips:' : '',
+      found.length === 0 ? '  • Make sure ESP32 is powered on' : '',
+      found.length === 0 ? '  • Check Serial Monitor for actual IP' : '',
+      found.length === 0 ? '  • Verify both devices on same WiFi' : '',
+      found.length === 0 ? '  • Arduino code must have CORS headers' : ''
+    ].filter(Boolean));
+    
+    // If found exactly one device, auto-fill it
+    if (found.length === 1) {
+      setEsp32Ip(found[0]);
+      toast({
+        title: 'ESP32 Found!',
+        description: `Automatically set IP to ${found[0]}`
+      });
+    }
+    
+    setIsScanning(false);
+  };
 
   const handleTestConnection = async () => {
     const results: string[] = [];
@@ -224,17 +311,47 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="esp32-ip">ESP32 IP Address</Label>
-            <Input
-              id="esp32-ip"
-              placeholder="192.168.254.118"
-              value={esp32Ip}
-              onChange={(e) => setEsp32Ip(e.target.value)}
-              className="bg-background text-foreground border-border font-mono text-base"
-            />
+            <div className="flex gap-2">
+              <Input
+                id="esp32-ip"
+                placeholder="192.168.254.118"
+                value={esp32Ip}
+                onChange={(e) => setEsp32Ip(e.target.value)}
+                className="bg-background text-foreground border-border font-mono text-base"
+              />
+              <Button
+                onClick={scanForESP32}
+                disabled={isScanning || isConnecting}
+                variant="outline"
+                size="icon"
+                title="Auto-detect ESP32"
+              >
+                {isScanning ? '...' : '🔍'}
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Find your ESP32 IP in your router's device list
+              Click 🔍 to auto-detect, or check Arduino Serial Monitor for IP
             </p>
           </div>
+
+          {foundDevices.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs">Found Devices (click to select):</Label>
+              <div className="flex flex-wrap gap-2">
+                {foundDevices.map((ip) => (
+                  <Button
+                    key={ip}
+                    onClick={() => setEsp32Ip(ip)}
+                    variant={esp32Ip === ip ? "default" : "outline"}
+                    size="sm"
+                    className="font-mono text-xs"
+                  >
+                    {ip}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-2">
             <Button
