@@ -157,24 +157,21 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       results.push(`🔌 Testing connection via secure proxy...`);
       setTestResults([...results]);
 
-      const response = await fetch('/functions/v1/esp32-proxy', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-        },
-        body: JSON.stringify({ ip: esp32Ip, endpoint: 'status' })
+      const { data, error } = await supabase.functions.invoke('esp32-proxy', {
+        body: { ip: esp32Ip, endpoint: 'status' }
       });
 
-      const data = await response.json();
+      if (error) {
+        throw error;
+      }
       
-      if (response.ok && data.status) {
+      if (data && data.status) {
         results.push(`✅ ESP32 responded successfully!`);
         results.push(`📊 LED Status: ${data.status}`);
         results.push('🎉 Connection test PASSED - You can connect!');
         setTestResults([...results]);
       } else {
-        results.push(`❌ Error: ${data.error || 'Unknown error'}`);
+        results.push(`❌ Error: ${data?.error || 'Unknown error'}`);
         results.push(`💡 Check: ESP32 powered on & on same WiFi network`);
         setTestResults([...results]);
       }
@@ -217,25 +214,21 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
     try {
       console.log(`[WiFi Setup] Attempting to connect to ESP32 at: ${esp32Ip}`);
       
-      // Use backend proxy to avoid Mixed Content issues
-      const response = await fetch('/functions/v1/esp32-proxy', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-        },
-        body: JSON.stringify({ ip: esp32Ip, endpoint: 'status' }),
-        signal: AbortSignal.timeout(8000)
+      // Use Supabase client to invoke edge function
+      const { data, error } = await supabase.functions.invoke('esp32-proxy', {
+        body: { ip: esp32Ip, endpoint: 'status' }
       });
 
-      console.log(`[WiFi Setup] Response status: ${response.status}`);
+      console.log(`[WiFi Setup] Response:`, { data, error });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}: Failed to connect to ESP32`);
+      if (error) {
+        throw new Error(error.message || 'Failed to connect to ESP32');
       }
 
-      const data = await response.json();
+      if (!data || !data.status) {
+        throw new Error(data?.error || 'Invalid response from ESP32');
+      }
+
       console.log('[WiFi Setup] ESP32 responded with:', data);
 
       // Connection successful
@@ -254,16 +247,9 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       onOpenChange(false);
     } catch (error: any) {
       console.error('[WiFi Setup] ESP32 connection error:', error);
-      console.error('[WiFi Setup] Error type:', error.name);
-      console.error('[WiFi Setup] Error message:', error.message);
       
       let errorMessage = 'Could not reach ESP32. ';
-      
-      if (error.name === 'AbortError') {
-        errorMessage += 'Connection timed out. Check if ESP32 is powered on and on the same network.';
-      } else {
-        errorMessage += error.message || 'Please verify IP address and ensure device is connected.';
-      }
+      errorMessage += error.message || 'Please verify IP address and ensure device is connected.';
       
       toast({
         title: 'Connection Failed',

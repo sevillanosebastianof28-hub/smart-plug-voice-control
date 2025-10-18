@@ -34,19 +34,11 @@ const Home = () => {
         return;
       }
 
-      const session = await supabase.auth.getSession();
-      const response = await fetch('/functions/v1/esp32-proxy', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.data.session?.access_token}`
-        },
-        body: JSON.stringify({ ip, endpoint: 'status' }),
-        signal: AbortSignal.timeout(5000)
+      const { data, error } = await supabase.functions.invoke('esp32-proxy', {
+        body: { ip, endpoint: 'status' }
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (!error && data && data.status) {
         const remoteStatus = data.status === 'on';
         
         // Update local state if different from remote (only if component is still mounted)
@@ -96,33 +88,24 @@ const Home = () => {
       
       console.log(`[ESP32 Control] Sending ${status ? 'ON' : 'OFF'} command to ${ip}`);
 
-      const session = await supabase.auth.getSession();
-      const response = await fetch('/functions/v1/esp32-proxy', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.data.session?.access_token}`
-        },
-        body: JSON.stringify({ 
+      const { data, error } = await supabase.functions.invoke('esp32-proxy', {
+        body: { 
           ip, 
           endpoint: 'control',
           status: status ? 'on' : 'off'
-        }),
-        signal: AbortSignal.timeout(5000)
+        }
       });
       
-      console.log(`[ESP32 Control] Response status: ${response.status}`);
+      console.log(`[ESP32 Control] Response:`, { data, error });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}: Failed to send command`);
+      if (error) {
+        throw new Error(error.message || 'Failed to send command');
       }
       
-      const data = await response.json();
       console.log('[ESP32 Control] Command sent successfully:', data);
       
       // Verify the response
-      if (data.status === (status ? 'on' : 'off')) {
+      if (data && data.status === (status ? 'on' : 'off')) {
         setIsLoading(false);
         return true;
       } else {
@@ -130,8 +113,6 @@ const Home = () => {
       }
     } catch (error: any) {
       console.error('[ESP32 Control] Communication error:', error);
-      console.error('[ESP32 Control] Error type:', error.name);
-      console.error('[ESP32 Control] Error message:', error.message);
       
       // Retry once on failure
       if (retryCount === 0) {
