@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Wifi } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { z } from 'zod';
+import { supabase } from '@/integrations/supabase/client';
 
 const ipSchema = z.string().ip({ version: 'v4', message: 'Invalid IPv4 address' });
 
@@ -151,59 +152,39 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
     results.push('✅ IP format is valid');
     setTestResults([...results]);
 
-    // Test 2: Check if running on HTTPS
-    const isHttps = window.location.protocol === 'https:';
-    if (isHttps) {
-      results.push('⚠️ Running on HTTPS - Mixed Content may block HTTP requests');
-      results.push('💡 Try: Access http://192.168.254.118/status directly in browser');
-    } else {
-      results.push('✅ Running on HTTP - No Mixed Content issues');
-    }
-    setTestResults([...results]);
-
-    // Test 3: Try to connect
+    // Test 2: Try via backend proxy (solves Mixed Content)
     try {
-      results.push(`🔌 Attempting to connect to http://${esp32Ip}/status...`);
+      results.push(`🔌 Testing connection via secure proxy...`);
       setTestResults([...results]);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const response = await fetch(`http://${esp32Ip}/status`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal
+      const response = await fetch('/functions/v1/esp32-proxy', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        },
+        body: JSON.stringify({ ip: esp32Ip, endpoint: 'status' })
       });
 
-      clearTimeout(timeoutId);
-
-      results.push(`📡 Response received: HTTP ${response.status}`);
+      const data = await response.json();
       
-      if (response.ok) {
-        const data = await response.json();
+      if (response.ok && data.status) {
         results.push(`✅ ESP32 responded successfully!`);
-        results.push(`📊 Data: ${JSON.stringify(data)}`);
+        results.push(`📊 LED Status: ${data.status}`);
         results.push('🎉 Connection test PASSED - You can connect!');
         setTestResults([...results]);
       } else {
-        results.push(`❌ HTTP error: ${response.status} ${response.statusText}`);
+        results.push(`❌ Error: ${data.error || 'Unknown error'}`);
+        results.push(`💡 Check: ESP32 powered on & on same WiFi network`);
         setTestResults([...results]);
       }
     } catch (error: any) {
-      results.push(`❌ Connection failed: ${error.name}`);
-      results.push(`📝 ${error.message}`);
-      
-      if (error.name === 'TypeError' || error.message.includes('Failed to fetch')) {
-        results.push('');
-        results.push('🔧 Possible causes:');
-        results.push('1. Mixed Content: HTTPS site blocking HTTP request');
-        results.push('2. CORS: Arduino code missing CORS headers');
-        results.push('3. Network: ESP32 not on same WiFi');
-        results.push('4. ESP32: Device is offline or IP changed');
-        results.push('');
-        results.push('💡 Quick test: Open http://192.168.254.118/status in new tab');
-      }
-      
+      results.push(`❌ Connection failed: ${error.message}`);
+      results.push('');
+      results.push('🔧 Troubleshooting:');
+      results.push('1. Is ESP32 powered on?');
+      results.push('2. Check Serial Monitor - does it show "Server started!"?');
+      results.push('3. Are you on the same WiFi network?');
       setTestResults([...results]);
     }
 
@@ -234,19 +215,24 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
     setIsConnecting(true);
 
     try {
-      console.log(`[WiFi Setup] Attempting to connect to ESP32 at: http://${esp32Ip}/status`);
+      console.log(`[WiFi Setup] Attempting to connect to ESP32 at: ${esp32Ip}`);
       
-      // Test actual connection to ESP32
-      const response = await fetch(`http://${esp32Ip}/status`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000) // 5 second timeout
+      // Use backend proxy to avoid Mixed Content issues
+      const response = await fetch('/functions/v1/esp32-proxy', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        },
+        body: JSON.stringify({ ip: esp32Ip, endpoint: 'status' }),
+        signal: AbortSignal.timeout(8000)
       });
 
       console.log(`[WiFi Setup] Response status: ${response.status}`);
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: Failed to connect to ESP32`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to connect to ESP32`);
       }
 
       const data = await response.json();
@@ -273,15 +259,10 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       
       let errorMessage = 'Could not reach ESP32. ';
       
-      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-        errorMessage += 'This may be due to:\n\n' +
-          '1. Mixed Content: Your browser blocks HTTP requests from HTTPS sites\n' +
-          '2. CORS: Missing CORS headers in Arduino code\n' +
-          '3. Network: ESP32 not on same WiFi network\n' +
-          '4. Firewall: Local firewall blocking the connection\n\n' +
-          'Try accessing this app via HTTP (not HTTPS) or check ESP32 code has CORS headers.';
-      } else if (error.name === 'AbortError') {
+      if (error.name === 'AbortError') {
         errorMessage += 'Connection timed out. Check if ESP32 is powered on and on the same network.';
+      } else {
+        errorMessage += error.message || 'Please verify IP address and ensure device is connected.';
       }
       
       toast({

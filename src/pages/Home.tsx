@@ -6,6 +6,7 @@ import { toast } from '@/hooks/use-toast';
 import { WiFiSetupDialog } from '@/components/WiFiSetupDialog';
 import { useNavigate } from 'react-router-dom';
 import logo from '@/assets/logo.png';
+import { supabase } from '@/integrations/supabase/client';
 
 const Home = () => {
   const [plugStatus, setPlugStatus] = useState(false);
@@ -33,9 +34,14 @@ const Home = () => {
         return;
       }
 
-      const response = await fetch(`http://${ip}/status`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+      const session = await supabase.auth.getSession();
+      const response = await fetch('/functions/v1/esp32-proxy', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.data.session?.access_token}`
+        },
+        body: JSON.stringify({ ip, endpoint: 'status' }),
         signal: AbortSignal.timeout(5000)
       });
 
@@ -88,20 +94,29 @@ const Home = () => {
 
       setIsLoading(true);
       
-      const url = `http://${ip}/control?status=${status ? 'on' : 'off'}`;
-      console.log(`[ESP32 Control] Sending command to: ${url}`);
+      console.log(`[ESP32 Control] Sending ${status ? 'ON' : 'OFF'} command to ${ip}`);
 
-      const response = await fetch(url, {
-        method: 'GET',
+      const session = await supabase.auth.getSession();
+      const response = await fetch('/functions/v1/esp32-proxy', {
+        method: 'POST',
         headers: { 
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.data.session?.access_token}`
         },
+        body: JSON.stringify({ 
+          ip, 
+          endpoint: 'control',
+          status: status ? 'on' : 'off'
+        }),
         signal: AbortSignal.timeout(5000)
       });
       
       console.log(`[ESP32 Control] Response status: ${response.status}`);
       
-      if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to send command`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to send command`);
+      }
       
       const data = await response.json();
       console.log('[ESP32 Control] Command sent successfully:', data);
@@ -129,14 +144,7 @@ const Home = () => {
         setIsLoading(false);
         
         let errorMessage = '⚠️ Unable to reach the ESP32. ';
-        
-        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-          errorMessage += 'Make sure:\n' +
-            '1. ESP32 is powered on\n' +
-            '2. Both devices are on the same WiFi\n' +
-            '3. Arduino code has CORS headers\n' +
-            '4. You\'re not blocked by Mixed Content (HTTPS → HTTP)';
-        }
+        errorMessage += error.message || 'Make sure ESP32 is powered on and on the same WiFi.';
         
         toast({
           title: 'Connection Failed',
