@@ -6,13 +6,15 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
     const { ip, endpoint, status } = await req.json()
+    
+    console.log(`[ESP32 Proxy] Request - IP: ${ip}, Endpoint: ${endpoint}, Status: ${status}`)
     
     if (!ip) {
       return new Response(
@@ -40,43 +42,62 @@ serve(async (req) => {
       url += '/status' // Default to status
     }
 
-    console.log(`Proxying request to ESP32: ${url}`)
+    console.log(`[ESP32 Proxy] Calling ESP32: ${url}`)
 
     // Make request to ESP32
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 5000)
 
-    const response = await fetch(url, {
+    const esp32Response = await fetch(url, {
       method: 'GET',
       signal: controller.signal
     })
 
     clearTimeout(timeoutId)
 
-    const data = await response.text()
-    
-    console.log(`ESP32 response: ${response.status} - ${data}`)
+    console.log(`[ESP32 Proxy] ESP32 responded with status: ${esp32Response.status}`)
+
+    if (!esp32Response.ok) {
+      const errorText = await esp32Response.text()
+      console.error(`[ESP32 Proxy] ESP32 error response: ${errorText}`)
+      return new Response(
+        JSON.stringify({ error: `ESP32 error: ${esp32Response.status}`, details: errorText }),
+        { status: esp32Response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Parse ESP32 JSON response
+    const esp32Data = await esp32Response.json()
+    console.log(`[ESP32 Proxy] ESP32 data:`, esp32Data)
 
     return new Response(
-      data,
+      JSON.stringify(esp32Data),
       { 
-        status: response.status,
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     )
 
   } catch (error: any) {
-    console.error('ESP32 proxy error:', error)
+    console.error('[ESP32 Proxy] Error:', error)
+    console.error('[ESP32 Proxy] Error name:', error.name)
+    console.error('[ESP32 Proxy] Error message:', error.message)
     
     let errorMessage = 'Failed to reach ESP32'
+    let statusCode = 500
+    
     if (error.name === 'AbortError') {
-      errorMessage = 'ESP32 connection timeout'
+      errorMessage = 'ESP32 connection timeout - device may be offline'
+      statusCode = 504
+    } else if (error.message?.includes('JSON')) {
+      errorMessage = 'ESP32 returned invalid JSON - check Arduino code'
+      statusCode = 502
     }
     
     return new Response(
       JSON.stringify({ error: errorMessage, details: error.message }),
       { 
-        status: 500,
+        status: statusCode,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     )
