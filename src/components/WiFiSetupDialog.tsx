@@ -118,7 +118,7 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
               placeholder="192.168.254.118"
               value={esp32Ip}
               onChange={(e) => setEsp32Ip(e.target.value)}
-              className="bg-secondary border-border"
+              className="bg-background text-foreground border-border font-mono text-base"
             />
             <p className="text-xs text-muted-foreground">
               Find your ESP32 IP in your router's device list
