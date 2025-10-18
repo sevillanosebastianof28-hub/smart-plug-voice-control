@@ -129,19 +129,14 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
     const results: string[] = [];
     
     if (!esp32Ip) {
-      toast({
-        title: 'IP Required',
-        description: 'Please enter an IP address to test',
-        variant: 'destructive'
-      });
+      toast({ title: 'IP Required', description: 'Please enter an IP address', variant: 'destructive' });
       return;
     }
 
     setIsConnecting(true);
-    setTestResults(['🔍 Starting connection test...']);
-    results.push('🔍 Starting connection test...');
+    results.push('🔍 Testing connection to ESP32...');
+    setTestResults([...results]);
 
-    // Test 1: IP format validation
     const validation = ipSchema.safeParse(esp32Ip);
     if (!validation.success) {
       results.push('❌ Invalid IP format');
@@ -152,39 +147,34 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
     results.push('✅ IP format is valid');
     setTestResults([...results]);
 
-    // Test 2: Try via backend proxy (solves Mixed Content)
     try {
-      results.push(`🔌 Testing connection via secure proxy...`);
+      results.push(`🔌 Connecting to http://${esp32Ip}/status...`);
       setTestResults([...results]);
 
-      const { data, error } = await supabase.functions.invoke('esp32-proxy', {
-        body: { ip: esp32Ip, endpoint: 'status' }
+      const response = await fetch(`http://${esp32Ip}/status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000)
       });
 
-      if (error) {
-        throw error;
-      }
-      
-      if (data && data.status) {
-        results.push(`✅ ESP32 responded successfully!`);
+      if (response.ok) {
+        const data = await response.json();
+        results.push(`✅ ESP32 responded!`);
         results.push(`📊 LED Status: ${data.status}`);
-        results.push('🎉 Connection test PASSED - You can connect!');
-        setTestResults([...results]);
+        results.push('🎉 Connection test PASSED!');
       } else {
-        results.push(`❌ Error: ${data?.error || 'Unknown error'}`);
-        results.push(`💡 Check: ESP32 powered on & on same WiFi network`);
-        setTestResults([...results]);
+        results.push(`❌ HTTP error: ${response.status}`);
       }
     } catch (error: any) {
-      results.push(`❌ Connection failed: ${error.message}`);
+      results.push(`❌ Failed: ${error.message}`);
       results.push('');
       results.push('🔧 Troubleshooting:');
       results.push('1. Is ESP32 powered on?');
-      results.push('2. Check Serial Monitor - does it show "Server started!"?');
-      results.push('3. Are you on the same WiFi network?');
-      setTestResults([...results]);
+      results.push('2. Check Serial Monitor for IP');
+      results.push('3. Same WiFi network?');
+      results.push('4. Arduino code has CORS headers?');
     }
-
+    setTestResults(results);
     setIsConnecting(false);
   };
 
@@ -212,30 +202,23 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
     setIsConnecting(true);
 
     try {
-      console.log(`[WiFi Setup] Attempting to connect to ESP32 at: ${esp32Ip}`);
+      console.log(`[WiFi Setup] Testing ESP32 at: http://${esp32Ip}/status`);
       
-      // Use Supabase client to invoke edge function
-      const { data, error } = await supabase.functions.invoke('esp32-proxy', {
-        body: { ip: esp32Ip, endpoint: 'status' }
+      const response = await fetch(`http://${esp32Ip}/status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000)
       });
 
-      console.log(`[WiFi Setup] Response:`, { data, error });
-      
-      if (error) {
-        throw new Error(error.message || 'Failed to connect to ESP32');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to connect`);
       }
 
-      if (!data || !data.status) {
-        throw new Error(data?.error || 'Invalid response from ESP32');
-      }
+      const data = await response.json();
+      console.log('[WiFi Setup] ESP32 responded:', data);
 
-      console.log('[WiFi Setup] ESP32 responded with:', data);
-
-      // Connection successful
       localStorage.setItem('esp32-ip', esp32Ip);
       setCurrentIp(esp32Ip);
-      
-      // Trigger storage event for other components
       window.dispatchEvent(new Event('storage'));
       
       toast({
@@ -246,14 +229,11 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       setIsConnecting(false);
       onOpenChange(false);
     } catch (error: any) {
-      console.error('[WiFi Setup] ESP32 connection error:', error);
-      
-      let errorMessage = 'Could not reach ESP32. ';
-      errorMessage += error.message || 'Please verify IP address and ensure device is connected.';
+      console.error('[WiFi Setup] Error:', error);
       
       toast({
         title: 'Connection Failed',
-        description: errorMessage,
+        description: error.message || 'Could not reach ESP32',
         variant: 'destructive'
       });
       setIsConnecting(false);

@@ -34,14 +34,16 @@ const Home = () => {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('esp32-proxy', {
-        body: { ip, endpoint: 'status' }
+      const response = await fetch(`http://${ip}/status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000)
       });
 
-      if (!error && data && data.status) {
+      if (response.ok) {
+        const data = await response.json();
         const remoteStatus = data.status === 'on';
         
-        // Update local state if different from remote (only if component is still mounted)
         if (isMountedRef.current) {
           setPlugStatus(prevStatus => {
             if (remoteStatus !== prevStatus) {
@@ -54,13 +56,11 @@ const Home = () => {
         return data;
       }
     } catch (error) {
-      // Silently fail for polling - don't show toasts for every poll failure
       console.log('ESP32 status check failed (device may be offline)');
     }
   }, []);
 
   const sendCommandToESP32 = useCallback(async (ip: string, status: boolean, retryCount = 0): Promise<boolean> => {
-    // Rate limiting: prevent spam (2 second minimum between requests)
     const now = Date.now();
     if (now - lastCommandTimeRef.current < 2000) {
       toast({
@@ -73,9 +73,8 @@ const Home = () => {
     lastCommandTimeRef.current = now;
 
     try {
-      // Validate IP format
       if (!ip || ip === 'null' || !ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
-        console.error('[ESP32 Control] Invalid IP address:', ip);
+        console.error('[ESP32] Invalid IP:', ip);
         toast({
           title: 'Connection Error',
           description: 'Invalid ESP32 IP. Please configure WiFi settings.',
@@ -85,51 +84,39 @@ const Home = () => {
       }
 
       setIsLoading(true);
-      
-      console.log(`[ESP32 Control] Sending ${status ? 'ON' : 'OFF'} command to ${ip}`);
+      console.log(`[ESP32] Sending ${status ? 'ON' : 'OFF'} command to http://${ip}/control?status=${status ? 'on' : 'off'}`);
 
-      const { data, error } = await supabase.functions.invoke('esp32-proxy', {
-        body: { 
-          ip, 
-          endpoint: 'control',
-          status: status ? 'on' : 'off'
-        }
+      const response = await fetch(`http://${ip}/control?status=${status ? 'on' : 'off'}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000)
       });
       
-      console.log(`[ESP32 Control] Response:`, { data, error });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
-      if (error) {
-        throw new Error(error.message || 'Failed to send command');
-      }
+      const data = await response.json();
+      console.log('[ESP32] Response:', data);
       
-      console.log('[ESP32 Control] Command sent successfully:', data);
-      
-      // Verify the response
-      if (data && data.status === (status ? 'on' : 'off')) {
+      if (data.status === (status ? 'on' : 'off')) {
         setIsLoading(false);
         return true;
       } else {
         throw new Error('Status mismatch');
       }
     } catch (error: any) {
-      console.error('[ESP32 Control] Communication error:', error);
+      console.error('[ESP32] Error:', error);
       
-      // Retry once on failure
       if (retryCount === 0) {
-        console.log('[ESP32 Control] Retrying command...');
+        console.log('[ESP32] Retrying...');
         await new Promise(resolve => setTimeout(resolve, 1000));
         return sendCommandToESP32(ip, status, 1);
       }
       
       if (isMountedRef.current) {
         setIsLoading(false);
-        
-        let errorMessage = '⚠️ Unable to reach the ESP32. ';
-        errorMessage += error.message || 'Make sure ESP32 is powered on and on the same WiFi.';
-        
         toast({
           title: 'Connection Failed',
-          description: errorMessage,
+          description: '⚠️ Cannot reach ESP32. Make sure it\'s powered on and on the same WiFi network.',
           variant: 'destructive'
         });
       }
