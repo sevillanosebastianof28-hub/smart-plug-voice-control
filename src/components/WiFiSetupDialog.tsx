@@ -24,6 +24,7 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
   const [esp32Ip, setEsp32Ip] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [currentIp, setCurrentIp] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<string[]>([]);
 
   // Update current IP when dialog opens
   useEffect(() => {
@@ -32,8 +33,95 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       setCurrentIp(savedIp);
       // Set default to new ESP32 IP
       setEsp32Ip(savedIp || '192.168.254.118');
+      setTestResults([]);
     }
   }, [open]);
+
+  const handleTestConnection = async () => {
+    const results: string[] = [];
+    
+    if (!esp32Ip) {
+      toast({
+        title: 'IP Required',
+        description: 'Please enter an IP address to test',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsConnecting(true);
+    setTestResults(['🔍 Starting connection test...']);
+    results.push('🔍 Starting connection test...');
+
+    // Test 1: IP format validation
+    const validation = ipSchema.safeParse(esp32Ip);
+    if (!validation.success) {
+      results.push('❌ Invalid IP format');
+      setTestResults(results);
+      setIsConnecting(false);
+      return;
+    }
+    results.push('✅ IP format is valid');
+    setTestResults([...results]);
+
+    // Test 2: Check if running on HTTPS
+    const isHttps = window.location.protocol === 'https:';
+    if (isHttps) {
+      results.push('⚠️ Running on HTTPS - Mixed Content may block HTTP requests');
+      results.push('💡 Try: Access http://192.168.254.118/status directly in browser');
+    } else {
+      results.push('✅ Running on HTTP - No Mixed Content issues');
+    }
+    setTestResults([...results]);
+
+    // Test 3: Try to connect
+    try {
+      results.push(`🔌 Attempting to connect to http://${esp32Ip}/status...`);
+      setTestResults([...results]);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(`http://${esp32Ip}/status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      results.push(`📡 Response received: HTTP ${response.status}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        results.push(`✅ ESP32 responded successfully!`);
+        results.push(`📊 Data: ${JSON.stringify(data)}`);
+        results.push('🎉 Connection test PASSED - You can connect!');
+        setTestResults([...results]);
+      } else {
+        results.push(`❌ HTTP error: ${response.status} ${response.statusText}`);
+        setTestResults([...results]);
+      }
+    } catch (error: any) {
+      results.push(`❌ Connection failed: ${error.name}`);
+      results.push(`📝 ${error.message}`);
+      
+      if (error.name === 'TypeError' || error.message.includes('Failed to fetch')) {
+        results.push('');
+        results.push('🔧 Possible causes:');
+        results.push('1. Mixed Content: HTTPS site blocking HTTP request');
+        results.push('2. CORS: Arduino code missing CORS headers');
+        results.push('3. Network: ESP32 not on same WiFi');
+        results.push('4. ESP32: Device is offline or IP changed');
+        results.push('');
+        results.push('💡 Quick test: Open http://192.168.254.118/status in new tab');
+      }
+      
+      setTestResults([...results]);
+    }
+
+    setIsConnecting(false);
+  };
 
   const handleConnect = async () => {
     if (!esp32Ip) {
@@ -148,13 +236,35 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
             </p>
           </div>
 
-          <Button
-            onClick={handleConnect}
-            disabled={isConnecting}
-            className="w-full"
-          >
-            {isConnecting ? 'Connecting...' : 'Connect to Device'}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleTestConnection}
+              disabled={isConnecting}
+              variant="outline"
+              className="flex-1"
+            >
+              {isConnecting ? 'Testing...' : 'Test Connection'}
+            </Button>
+            <Button
+              onClick={handleConnect}
+              disabled={isConnecting}
+              className="flex-1"
+            >
+              {isConnecting ? 'Connecting...' : 'Connect'}
+            </Button>
+          </div>
+
+          {testResults.length > 0 && (
+            <div className="bg-muted/50 border border-border rounded-lg p-3 max-h-64 overflow-y-auto">
+              <div className="space-y-1 font-mono text-xs">
+                {testResults.map((result, index) => (
+                  <div key={index} className="text-foreground/90">
+                    {result}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {currentIp && (
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
