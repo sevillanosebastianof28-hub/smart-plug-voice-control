@@ -30,7 +30,8 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
     if (open) {
       const savedIp = localStorage.getItem('esp32-ip');
       setCurrentIp(savedIp);
-      setEsp32Ip('');
+      // Set default to new ESP32 IP
+      setEsp32Ip(savedIp || '192.168.254.118');
     }
   }, [open]);
 
@@ -114,7 +115,7 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
             <Label htmlFor="esp32-ip">ESP32 IP Address</Label>
             <Input
               id="esp32-ip"
-              placeholder="192.168.1.100"
+              placeholder="192.168.254.118"
               value={esp32Ip}
               onChange={(e) => setEsp32Ip(e.target.value)}
               className="bg-secondary border-border"
