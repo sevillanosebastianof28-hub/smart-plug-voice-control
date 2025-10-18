@@ -59,6 +59,8 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
     setIsConnecting(true);
 
     try {
+      console.log(`[WiFi Setup] Attempting to connect to ESP32 at: http://${esp32Ip}/status`);
+      
       // Test actual connection to ESP32
       const response = await fetch(`http://${esp32Ip}/status`, {
         method: 'GET',
@@ -66,9 +68,14 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
         signal: AbortSignal.timeout(5000) // 5 second timeout
       });
 
+      console.log(`[WiFi Setup] Response status: ${response.status}`);
+      
       if (!response.ok) {
-        throw new Error('Failed to connect to ESP32');
+        throw new Error(`HTTP ${response.status}: Failed to connect to ESP32`);
       }
+
+      const data = await response.json();
+      console.log('[WiFi Setup] ESP32 responded with:', data);
 
       // Connection successful
       localStorage.setItem('esp32-ip', esp32Ip);
@@ -84,11 +91,27 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       
       setIsConnecting(false);
       onOpenChange(false);
-    } catch (error) {
-      console.error('ESP32 connection error:', error);
+    } catch (error: any) {
+      console.error('[WiFi Setup] ESP32 connection error:', error);
+      console.error('[WiFi Setup] Error type:', error.name);
+      console.error('[WiFi Setup] Error message:', error.message);
+      
+      let errorMessage = 'Could not reach ESP32. ';
+      
+      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        errorMessage += 'This may be due to:\n\n' +
+          '1. Mixed Content: Your browser blocks HTTP requests from HTTPS sites\n' +
+          '2. CORS: Missing CORS headers in Arduino code\n' +
+          '3. Network: ESP32 not on same WiFi network\n' +
+          '4. Firewall: Local firewall blocking the connection\n\n' +
+          'Try accessing this app via HTTP (not HTTPS) or check ESP32 code has CORS headers.';
+      } else if (error.name === 'AbortError') {
+        errorMessage += 'Connection timed out. Check if ESP32 is powered on and on the same network.';
+      }
+      
       toast({
         title: 'Connection Failed',
-        description: 'Could not reach ESP32. Please verify the IP address and ensure the device is powered on and connected to your network.',
+        description: errorMessage,
         variant: 'destructive'
       });
       setIsConnecting(false);

@@ -77,7 +77,7 @@ const Home = () => {
     try {
       // Validate IP format
       if (!ip || ip === 'null' || !ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
-        console.error('Invalid ESP32 IP address:', ip);
+        console.error('[ESP32 Control] Invalid IP address:', ip);
         toast({
           title: 'Connection Error',
           description: 'Invalid ESP32 IP. Please configure WiFi settings.',
@@ -87,8 +87,11 @@ const Home = () => {
       }
 
       setIsLoading(true);
+      
+      const url = `http://${ip}/control?status=${status ? 'on' : 'off'}`;
+      console.log(`[ESP32 Control] Sending command to: ${url}`);
 
-      const response = await fetch(`http://${ip}/control?status=${status ? 'on' : 'off'}`, {
+      const response = await fetch(url, {
         method: 'GET',
         headers: { 
           'Content-Type': 'application/json'
@@ -96,10 +99,12 @@ const Home = () => {
         signal: AbortSignal.timeout(5000)
       });
       
-      if (!response.ok) throw new Error('Failed to send command');
+      console.log(`[ESP32 Control] Response status: ${response.status}`);
+      
+      if (!response.ok) throw new Error(`HTTP ${response.status}: Failed to send command`);
       
       const data = await response.json();
-      console.log('Command sent successfully to ESP32:', data);
+      console.log('[ESP32 Control] Command sent successfully:', data);
       
       // Verify the response
       if (data.status === (status ? 'on' : 'off')) {
@@ -108,21 +113,34 @@ const Home = () => {
       } else {
         throw new Error('Status mismatch');
       }
-    } catch (error) {
-      console.error('ESP32 communication error:', error);
+    } catch (error: any) {
+      console.error('[ESP32 Control] Communication error:', error);
+      console.error('[ESP32 Control] Error type:', error.name);
+      console.error('[ESP32 Control] Error message:', error.message);
       
       // Retry once on failure
       if (retryCount === 0) {
-        console.log('Retrying command...');
+        console.log('[ESP32 Control] Retrying command...');
         await new Promise(resolve => setTimeout(resolve, 1000));
         return sendCommandToESP32(ip, status, 1);
       }
       
       if (isMountedRef.current) {
         setIsLoading(false);
+        
+        let errorMessage = '⚠️ Unable to reach the ESP32. ';
+        
+        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+          errorMessage += 'Make sure:\n' +
+            '1. ESP32 is powered on\n' +
+            '2. Both devices are on the same WiFi\n' +
+            '3. Arduino code has CORS headers\n' +
+            '4. You\'re not blocked by Mixed Content (HTTPS → HTTP)';
+        }
+        
         toast({
           title: 'Connection Failed',
-          description: '⚠️ Unable to reach the ESP32. Make sure your device is on the same Wi-Fi network.',
+          description: errorMessage,
           variant: 'destructive'
         });
       }
