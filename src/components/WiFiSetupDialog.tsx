@@ -1,20 +1,14 @@
-import { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Wifi } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
-import { z } from 'zod';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Wifi } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { z } from "zod";
+import { supabase } from "@/integrations/supabase/client";
 
-const ipSchema = z.string().ip({ version: 'v4', message: 'Invalid IPv4 address' });
+const ipSchema = z.string().ip({ version: "v4", message: "Invalid IPv4 address" });
 
 interface WiFiSetupDialogProps {
   open: boolean;
@@ -22,7 +16,7 @@ interface WiFiSetupDialogProps {
 }
 
 export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
-  const [esp32Ip, setEsp32Ip] = useState('');
+  const [esp32Ip, setEsp32Ip] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [currentIp, setCurrentIp] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<string[]>([]);
@@ -32,10 +26,10 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
   // Update current IP when dialog opens
   useEffect(() => {
     if (open) {
-      const savedIp = localStorage.getItem('esp32-ip');
+      const savedIp = localStorage.getItem("esp32-ip");
       setCurrentIp(savedIp);
       // Set default to new ESP32 IP
-      setEsp32Ip(savedIp || '192.168.254.118');
+      setEsp32Ip(savedIp || "192.168.254.118");
       setTestResults([]);
       setFoundDevices([]);
     }
@@ -43,53 +37,47 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
 
   const scanForESP32 = async () => {
     setIsScanning(true);
-    setTestResults(['🔍 Scanning local network for ESP32 devices...']);
+    setTestResults(["🔍 Scanning local network for ESP32 devices..."]);
     const found: string[] = [];
-    
+
     // Get the base IP from current network (assume 192.168.x.x)
-    const baseIPs = [
-      '192.168.1.',
-      '192.168.0.',
-      '192.168.254.',
-      '192.168.100.',
-      '10.0.0.'
-    ];
-    
+    const baseIPs = ["192.168.1.", "192.168.0.", "192.168.254.", "192.168.100.", "10.0.0."];
+
     // Common IP ranges to check
     const commonIPs = [100, 101, 102, 110, 111, 112, 118, 150, 200];
-    
+
     let checkedCount = 0;
     const totalToCheck = baseIPs.length * commonIPs.length;
-    
+
     for (const base of baseIPs) {
       for (const last of commonIPs) {
         const testIp = `${base}${last}`;
         checkedCount++;
-        
+
         setTestResults([
-          '🔍 Scanning local network for ESP32 devices...',
+          "🔍 Scanning local network for ESP32 devices...",
           `📡 Checked ${checkedCount}/${totalToCheck} addresses`,
           `🔎 Currently testing: ${testIp}`,
-          ...found.map(ip => `✅ Found: ${ip}`)
+          ...found.map((ip) => `✅ Found: ${ip}`),
         ]);
-        
+
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 1000);
-          
+
           const response = await fetch(`http://${testIp}/status`, {
-            method: 'GET',
-            signal: controller.signal
+            method: "GET",
+            signal: controller.signal,
           });
-          
+
           clearTimeout(timeoutId);
-          
+
           if (response.ok) {
             const data = await response.json();
             // Check if it looks like our ESP32 (has "status" field)
-            if (data && 'status' in data) {
+            if (data && "status" in data) {
               found.push(testIp);
-              setFoundDevices(prev => [...prev, testIp]);
+              setFoundDevices((prev) => [...prev, testIp]);
             }
           }
         } catch {
@@ -97,54 +85,54 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
         }
       }
     }
-    
-    setTestResults([
-      `✅ Scan complete! Checked ${totalToCheck} addresses`,
-      '',
-      found.length > 0 
-        ? `🎉 Found ${found.length} ESP32 device(s):`
-        : '❌ No ESP32 devices found',
-      ...found.map(ip => `  • ${ip}`),
-      '',
-      found.length === 0 ? '💡 Tips:' : '',
-      found.length === 0 ? '  • Make sure ESP32 is powered on' : '',
-      found.length === 0 ? '  • Check Serial Monitor for actual IP' : '',
-      found.length === 0 ? '  • Verify both devices on same WiFi' : '',
-      found.length === 0 ? '  • Arduino code must have CORS headers' : ''
-    ].filter(Boolean));
-    
+
+    setTestResults(
+      [
+        `✅ Scan complete! Checked ${totalToCheck} addresses`,
+        "",
+        found.length > 0 ? ` Found ${found.length} ESP32 device(s):` : "❌ No ESP32 devices found!",
+        ...found.map((ip) => `  • ${ip}`),
+        "",
+        found.length === 0 ? " Tips:" : "",
+        found.length === 0 ? "  • Make sure ESP32 is powered on" : "",
+        found.length === 0 ? "  • Check Serial Monitor for actual IP" : "",
+        found.length === 0 ? "  • Verify both devices on same WiFi" : "",
+        found.length === 0 ? "  • Arduino code must have CORS headers" : "",
+      ].filter(Boolean),
+    );
+
     // If found exactly one device, auto-fill it
     if (found.length === 1) {
       setEsp32Ip(found[0]);
       toast({
-        title: 'ESP32 Found!',
-        description: `Automatically set IP to ${found[0]}`
+        title: "ESP32 Found!",
+        description: `Automatically set IP to ${found[0]}`,
       });
     }
-    
+
     setIsScanning(false);
   };
 
   const handleTestConnection = async () => {
     const results: string[] = [];
-    
+
     if (!esp32Ip) {
-      toast({ title: 'IP Required', description: 'Please enter an IP address', variant: 'destructive' });
+      toast({ title: "IP Required", description: "Please enter an IP address", variant: "destructive" });
       return;
     }
 
     setIsConnecting(true);
-    results.push('🔍 Testing connection to ESP32...');
+    results.push("🔍 Testing connection to ESP32...");
     setTestResults([...results]);
 
     const validation = ipSchema.safeParse(esp32Ip);
     if (!validation.success) {
-      results.push('❌ Invalid IP format');
+      results.push("❌ Invalid IP format");
       setTestResults(results);
       setIsConnecting(false);
       return;
     }
-    results.push('✅ IP format is valid');
+    results.push("✅ IP format is valid");
     setTestResults([...results]);
 
     try {
@@ -152,27 +140,27 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       setTestResults([...results]);
 
       const response = await fetch(`http://${esp32Ip}/status`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000)
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(5000),
       });
 
       if (response.ok) {
         const data = await response.json();
-        results.push(`✅ ESP32 responded!`);
-        results.push(`📊 LED Status: ${data.status}`);
-        results.push('🎉 Connection test PASSED!');
+        results.push(` ESP32 responded!`);
+        results.push(` LED Status: ${data.status}`);
+        results.push(" Connection test PASSED!");
       } else {
         results.push(`❌ HTTP error: ${response.status}`);
       }
     } catch (error: any) {
       results.push(`❌ Failed: ${error.message}`);
-      results.push('');
-      results.push('🔧 Troubleshooting:');
-      results.push('1. Is ESP32 powered on?');
-      results.push('2. Check Serial Monitor for IP');
-      results.push('3. Same WiFi network?');
-      results.push('4. Arduino code has CORS headers?');
+      results.push("");
+      results.push("🔧 Troubleshooting:");
+      results.push("1. Is ESP32 powered on?");
+      results.push("2. Check Serial Monitor for IP");
+      results.push("3. Same WiFi network?");
+      results.push("4. Arduino code has CORS headers?");
     }
     setTestResults(results);
     setIsConnecting(false);
@@ -181,9 +169,9 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
   const handleConnect = async () => {
     if (!esp32Ip) {
       toast({
-        title: 'IP Required',
-        description: 'Please enter your ESP32 IP address',
-        variant: 'destructive'
+        title: "IP Required",
+        description: "Please enter your ESP32 IP address",
+        variant: "destructive",
       });
       return;
     }
@@ -192,9 +180,9 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
     const validation = ipSchema.safeParse(esp32Ip);
     if (!validation.success) {
       toast({
-        title: 'Invalid IP Address',
-        description: 'Please enter a valid IPv4 address (e.g., 192.168.1.100)',
-        variant: 'destructive'
+        title: "Invalid IP Address",
+        description: "Please enter a valid IPv4 address (e.g., 192.168.1.100)",
+        variant: "destructive",
       });
       return;
     }
@@ -203,11 +191,11 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
 
     try {
       console.log(`[WiFi Setup] Testing ESP32 at: http://${esp32Ip}/status`);
-      
+
       const response = await fetch(`http://${esp32Ip}/status`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000)
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(5000),
       });
 
       if (!response.ok) {
@@ -215,26 +203,26 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
       }
 
       const data = await response.json();
-      console.log('[WiFi Setup] ESP32 responded:', data);
+      console.log("[WiFi Setup] ESP32 responded:", data);
 
-      localStorage.setItem('esp32-ip', esp32Ip);
+      localStorage.setItem("esp32-ip", esp32Ip);
       setCurrentIp(esp32Ip);
-      window.dispatchEvent(new Event('storage'));
-      
+      window.dispatchEvent(new Event("storage"));
+
       toast({
-        title: 'Connected to ESP32',
-        description: `Successfully connected to ${esp32Ip}`
+        title: "Connected to ESP32",
+        description: `Successfully connected to ${esp32Ip}`,
       });
-      
+
       setIsConnecting(false);
       onOpenChange(false);
     } catch (error: any) {
-      console.error('[WiFi Setup] Error:', error);
-      
+      console.error("[WiFi Setup] Error:", error);
+
       toast({
-        title: 'Connection Failed',
-        description: error.message || 'Could not reach ESP32',
-        variant: 'destructive'
+        title: "Connection Failed",
+        description: error.message || "Could not reach ESP32",
+        variant: "destructive",
       });
       setIsConnecting(false);
     }
@@ -250,9 +238,7 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
             </div>
             <DialogTitle>Connect to ESP32</DialogTitle>
           </div>
-          <DialogDescription>
-            Enter your ESP32 smart plug IP address to establish connection
-          </DialogDescription>
+          <DialogDescription>Enter your ESP32 smart plug IP address to establish connection</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -273,7 +259,7 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
                 size="icon"
                 title="Auto-detect ESP32"
               >
-                {isScanning ? '...' : '🔍'}
+                {isScanning ? "..." : "🔍"}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -301,20 +287,11 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
           )}
 
           <div className="flex gap-2">
-            <Button
-              onClick={handleTestConnection}
-              disabled={isConnecting}
-              variant="outline"
-              className="flex-1"
-            >
-              {isConnecting ? 'Testing...' : 'Test Connection'}
+            <Button onClick={handleTestConnection} disabled={isConnecting} variant="outline" className="flex-1">
+              {isConnecting ? "Testing..." : "Test Connection"}
             </Button>
-            <Button
-              onClick={handleConnect}
-              disabled={isConnecting}
-              className="flex-1"
-            >
-              {isConnecting ? 'Connecting...' : 'Connect'}
+            <Button onClick={handleConnect} disabled={isConnecting} className="flex-1">
+              {isConnecting ? "Connecting..." : "Connect"}
             </Button>
           </div>
 
@@ -333,8 +310,7 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
           {currentIp && (
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
               <p className="text-sm">
-                <span className="font-medium">Current Device:</span>{' '}
-                <span className="text-primary">{currentIp}</span>
+                <span className="font-medium">Current Device:</span> <span className="text-primary">{currentIp}</span>
               </p>
             </div>
           )}
