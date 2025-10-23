@@ -158,12 +158,10 @@ const Home = () => {
         const transcriptLower = finalTranscript.toLowerCase().trim();
         setFeedback(`You said: "${finalTranscript}"`);
         
-        // Check for "turn on" commands
+        // Check for "turn on" and "switch on" commands
         if (
           transcriptLower.includes('turn on') || 
-          transcriptLower.includes('switch on') ||
-          transcriptLower.includes('activate') ||
-          transcriptLower === 'on'
+          transcriptLower.includes('switch on')
         ) {
           setFeedback('Sure! Turning on the light now...');
           const newStatus = true;
@@ -179,12 +177,10 @@ const Home = () => {
             });
           }
         } 
-        // Check for "turn off" commands
+        // Check for "turn off" and "switch off" commands
         else if (
           transcriptLower.includes('turn off') || 
-          transcriptLower.includes('switch off') ||
-          transcriptLower.includes('deactivate') ||
-          transcriptLower === 'off'
+          transcriptLower.includes('switch off')
         ) {
           setFeedback('Sure! Turning off the light now...');
           const newStatus = false;
