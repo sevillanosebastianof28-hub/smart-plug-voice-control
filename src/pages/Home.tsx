@@ -47,9 +47,9 @@ const Home = () => {
       console.log(`[Firebase] Sending ${status ? 'ON' : 'OFF'} command to cloud`);
 
       const response = await fetch(`${FIREBASE_URL}/device/light.json`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ light: status ? 1 : 0 })
+        body: JSON.stringify(status ? 1 : 0)
       });
       
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
