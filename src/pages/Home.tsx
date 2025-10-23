@@ -44,18 +44,22 @@ const Home = () => {
 
     try {
       setIsLoading(true);
-      console.log(`[Firebase] Sending ${status ? 'ON' : 'OFF'} command to cloud`);
+      const commandValue = status ? 1 : 0;
+      console.log(`[Firebase] Sending ${status ? 'ON' : 'OFF'} command (value: ${commandValue}) to ${FIREBASE_URL}/device/light.json`);
 
       const response = await fetch(`${FIREBASE_URL}/device/light.json`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(status ? 1 : 0)
+        body: JSON.stringify(commandValue)
       });
+      
+      console.log('[Firebase] Response status:', response.status);
       
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
       const data = await response.json();
-      console.log('[Firebase] Response:', data);
+      console.log('[Firebase] Response data:', data);
+      console.log('[Firebase] ✅ Command sent successfully');
       
       setIsLoading(false);
       return true;
