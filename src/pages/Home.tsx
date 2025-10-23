@@ -212,10 +212,10 @@ const Home = () => {
           });
         }
         else {
-          setFeedback('Command not recognized. Try: "turn on", "turn off", or "check status"');
+          setFeedback('Command not recognized. Try: "turn on", "turn off", "switch on", or "switch off"');
           toast({
             title: 'Command Not Recognized',
-            description: 'Try: "turn on the light", "turn off", or "check status"',
+            description: 'Try: "turn on", "turn off", "switch on", or "switch off"',
             variant: 'destructive'
           });
         }
@@ -489,7 +489,7 @@ const Home = () => {
               <div className="bg-card/50 border border-border/50 rounded-lg p-3 sm:p-4 transition-all luminous-border">
                 <p className="text-xs sm:text-sm text-muted-foreground text-center">
                   <span className="font-medium text-foreground">Voice Commands:</span>{' '}
-                  "turn on the light", "turn off", "activate", "deactivate", "check status"
+                  "turn on", "turn off", "switch on", "switch off", "check status"
                 </p>
               </div>
             </div>
