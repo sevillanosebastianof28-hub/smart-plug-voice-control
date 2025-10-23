@@ -66,6 +66,32 @@ void loop() {
 void connectWiFiFromFirebase() {
   digitalWrite(statusLedPin, LOW); // Status LED OFF while connecting
   
+  // FIRST: Connect using hardcoded WiFi to establish internet connection
+  Serial.println("Connecting to hardcoded WiFi...");
+  ssid = String(hardcodedSSID);
+  password = String(hardcodedPassword);
+  WiFi.begin(ssid.c_str(), password.c_str());
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    digitalWrite(statusLedPin, attempts % 2);
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    digitalWrite(statusLedPin, LOW);
+    Serial.println("\n✗ Failed to connect to hardcoded WiFi");
+    return;
+  }
+  
+  digitalWrite(statusLedPin, HIGH);
+  Serial.println("\n✓ Connected to: " + ssid);
+  Serial.println("IP Address: " + WiFi.localIP().toString());
+  
+  // SECOND: Now that we have internet, check Firebase for updated WiFi credentials
+  Serial.println("Checking Firebase for updated WiFi credentials...");
   HTTPClient http;
   String wifiUrl = String(firebaseHost) + "/device/wifi.json";
   
@@ -77,64 +103,51 @@ void connectWiFiFromFirebase() {
     StaticJsonDocument<512> doc;
     deserializeJson(doc, payload);
     
-    ssid = doc["ssid"].as<String>();
-    password = doc["password"].as<String>();
+    String newSsid = doc["ssid"].as<String>();
+    String newPassword = doc["password"].as<String>();
     
-    ssid.trim();
-    password.trim();
+    newSsid.trim();
+    newPassword.trim();
     
-    // If Firebase WiFi credentials are empty, use hardcoded ones
-    if (ssid.length() == 0 || password.length() == 0) {
-      ssid = String(hardcodedSSID);
-      password = String(hardcodedPassword);
-      Serial.println("Using hardcoded WiFi credentials");
-    }
-    
-    Serial.println("Connecting to Wi-Fi: " + ssid);
-    WiFi.begin(ssid.c_str(), password.c_str());
-    
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-      // Blink status LED while connecting
-      digitalWrite(statusLedPin, attempts % 2);
-      delay(500);
-      Serial.print(".");
-      attempts++;
-    }
-    
-    if (WiFi.status() == WL_CONNECTED) {
-      digitalWrite(statusLedPin, HIGH); // Status LED solid ON when connected
-      Serial.println("\n✓ Connected to: " + ssid);
-      Serial.println("IP Address: " + WiFi.localIP().toString());
+    // If Firebase has different credentials, reconnect to the new WiFi
+    if (newSsid.length() > 0 && newPassword.length() > 0 && newSsid != ssid) {
+      Serial.println("Found new WiFi in Firebase: " + newSsid);
+      Serial.println("Reconnecting to new WiFi...");
+      
+      WiFi.disconnect();
+      delay(1000);
+      
+      ssid = newSsid;
+      password = newPassword;
+      WiFi.begin(ssid.c_str(), password.c_str());
+      
+      attempts = 0;
+      while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+        digitalWrite(statusLedPin, attempts % 2);
+        delay(500);
+        Serial.print(".");
+        attempts++;
+      }
+      
+      if (WiFi.status() == WL_CONNECTED) {
+        digitalWrite(statusLedPin, HIGH);
+        Serial.println("\n✓ Connected to new WiFi: " + ssid);
+        Serial.println("IP Address: " + WiFi.localIP().toString());
+      } else {
+        digitalWrite(statusLedPin, LOW);
+        Serial.println("\n✗ Failed to connect to new WiFi, reverting...");
+        
+        // Revert to hardcoded WiFi
+        ssid = String(hardcodedSSID);
+        password = String(hardcodedPassword);
+        WiFi.begin(ssid.c_str(), password.c_str());
+        delay(5000);
+      }
     } else {
-      digitalWrite(statusLedPin, LOW);
-      Serial.println("\n✗ Failed to connect");
+      Serial.println("No new WiFi credentials in Firebase, staying connected.");
     }
   } else {
-    Serial.println("Failed to fetch WiFi credentials from Firebase");
-    Serial.println("Trying hardcoded WiFi...");
-    
-    // Fallback to hardcoded WiFi
-    ssid = String(hardcodedSSID);
-    password = String(hardcodedPassword);
-    WiFi.begin(ssid.c_str(), password.c_str());
-    
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-      digitalWrite(statusLedPin, attempts % 2);
-      delay(500);
-      Serial.print(".");
-      attempts++;
-    }
-    
-    if (WiFi.status() == WL_CONNECTED) {
-      digitalWrite(statusLedPin, HIGH);
-      Serial.println("\n✓ Connected to: " + ssid);
-      Serial.println("IP Address: " + WiFi.localIP().toString());
-    } else {
-      digitalWrite(statusLedPin, LOW);
-      Serial.println("\n✗ Failed to connect");
-    }
+    Serial.println("Could not fetch WiFi from Firebase (HTTP " + String(httpCode) + ")");
   }
   
   http.end();
