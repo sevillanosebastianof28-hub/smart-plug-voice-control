@@ -5,10 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Wifi } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { z } from "zod";
-import { supabase } from "@/integrations/supabase/client";
 
-const ipSchema = z.string().ip({ version: "v4", message: "Invalid IPv4 address" });
+const FIREBASE_URL = "https://smart-lumoswitch-v2-default-rtdb.asia-southeast1.firebasedatabase.app";
 
 interface WiFiSetupDialogProps {
   open: boolean;
@@ -16,215 +14,68 @@ interface WiFiSetupDialogProps {
 }
 
 export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
-  const [esp32Ip, setEsp32Ip] = useState("");
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [currentIp, setCurrentIp] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<string[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
-  const [foundDevices, setFoundDevices] = useState<string[]>([]);
+  const [ssid, setSsid] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Update current IP when dialog opens
+  // Load saved WiFi credentials when dialog opens
   useEffect(() => {
     if (open) {
-      const savedIp = localStorage.getItem("esp32-ip");
-      setCurrentIp(savedIp);
-      // Set default to new ESP32 IP
-      setEsp32Ip(savedIp || "192.168.254.118");
-      setTestResults([]);
-      setFoundDevices([]);
+      const savedSsid = localStorage.getItem("wifi-ssid");
+      const savedPassword = localStorage.getItem("wifi-password");
+      setSsid(savedSsid || "");
+      setPassword(savedPassword || "");
     }
   }, [open]);
 
-  const scanForESP32 = async () => {
-    setIsScanning(true);
-    setTestResults(["🔍 Scanning local network for ESP32 devices..."]);
-    const found: string[] = [];
-
-    // Get the base IP from current network (assume 192.168.x.x)
-    const baseIPs = ["192.168.1.", "192.168.0.", "192.168.254.", "192.168.100.", "10.0.0."];
-
-    // Common IP ranges to check
-    const commonIPs = [100, 101, 102, 110, 111, 112, 118, 150, 200];
-
-    let checkedCount = 0;
-    const totalToCheck = baseIPs.length * commonIPs.length;
-
-    for (const base of baseIPs) {
-      for (const last of commonIPs) {
-        const testIp = `${base}${last}`;
-        checkedCount++;
-
-        setTestResults([
-          "🔍 Scanning local network for ESP32 devices...",
-          `📡 Checked ${checkedCount}/${totalToCheck} addresses`,
-          `🔎 Currently testing: ${testIp}`,
-          ...found.map((ip) => `✅ Found: ${ip}`),
-        ]);
-
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 1000);
-
-          const response = await fetch(`http://${testIp}/status`, {
-            method: "GET",
-            signal: controller.signal,
-          });
-
-          clearTimeout(timeoutId);
-
-          if (response.ok) {
-            const data = await response.json();
-            // Check if it looks like our ESP32 (has "status" field)
-            if (data && "status" in data) {
-              found.push(testIp);
-              setFoundDevices((prev) => [...prev, testIp]);
-            }
-          }
-        } catch {
-          // Ignore errors, just move to next IP
-        }
-      }
-    }
-
-    setTestResults(
-      [
-        `✅ Scan complete! Checked ${totalToCheck} addresses`,
-        "",
-        found.length > 0 ? ` Found ${found.length} ESP32 device(s):` : "❌ No ESP32 devices found!",
-        ...found.map((ip) => `  • ${ip}`),
-        "",
-        found.length === 0 ? " Tips:" : "",
-        found.length === 0 ? "  • Make sure ESP32 is powered on" : "",
-        found.length === 0 ? "  • Check Serial Monitor for actual IP" : "",
-        found.length === 0 ? "  • Verify both devices on same WiFi" : "",
-        found.length === 0 ? "  • Arduino code must have CORS headers" : "",
-      ].filter(Boolean),
-    );
-
-    // If found exactly one device, auto-fill it
-    if (found.length === 1) {
-      setEsp32Ip(found[0]);
+  const handleSaveWiFi = async () => {
+    if (!ssid || !password) {
       toast({
-        title: "ESP32 Found!",
-        description: `Automatically set IP to ${found[0]}`,
-      });
-    }
-
-    setIsScanning(false);
-  };
-
-  const handleTestConnection = async () => {
-    const results: string[] = [];
-
-    if (!esp32Ip) {
-      toast({ title: "IP Required", description: "Please enter an IP address", variant: "destructive" });
-      return;
-    }
-
-    setIsConnecting(true);
-    results.push("🔍 Testing connection to ESP32...");
-    setTestResults([...results]);
-
-    const validation = ipSchema.safeParse(esp32Ip);
-    if (!validation.success) {
-      results.push("❌ Invalid IP format");
-      setTestResults(results);
-      setIsConnecting(false);
-      return;
-    }
-    results.push("✅ IP format is valid");
-    setTestResults([...results]);
-
-    try {
-      results.push(`🔌 Connecting to http://${esp32Ip}/status...`);
-      setTestResults([...results]);
-
-      const response = await fetch(`http://${esp32Ip}/status`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(5000),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        results.push(` ESP32 responded!`);
-        results.push(` LED Status: ${data.status}`);
-        results.push(" Connection test PASSED!");
-      } else {
-        results.push(`❌ HTTP error: ${response.status}`);
-      }
-    } catch (error: any) {
-      results.push(`❌ Failed: ${error.message}`);
-      results.push("");
-      results.push("🔧 Troubleshooting:");
-      results.push("1. Is ESP32 powered on?");
-      results.push("2. Check Serial Monitor for IP");
-      results.push("3. Same WiFi network?");
-      results.push("4. Arduino code has CORS headers?");
-    }
-    setTestResults(results);
-    setIsConnecting(false);
-  };
-
-  const handleConnect = async () => {
-    if (!esp32Ip) {
-      toast({
-        title: "IP Required",
-        description: "Please enter your ESP32 IP address",
+        title: "Missing Information",
+        description: "Please enter both WiFi name and password",
         variant: "destructive",
       });
       return;
     }
 
-    // Validate IP format
-    const validation = ipSchema.safeParse(esp32Ip);
-    if (!validation.success) {
-      toast({
-        title: "Invalid IP Address",
-        description: "Please enter a valid IPv4 address (e.g., 192.168.1.100)",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsConnecting(true);
+    setIsSaving(true);
 
     try {
-      console.log(`[WiFi Setup] Testing ESP32 at: http://${esp32Ip}/status`);
-
-      const response = await fetch(`http://${esp32Ip}/status`, {
-        method: "GET",
+      // Send WiFi credentials to Firebase
+      const response = await fetch(`${FIREBASE_URL}/device/wifi.json`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(5000),
+        body: JSON.stringify({
+          ssid: ssid,
+          password: password
+        })
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: Failed to connect`);
+        throw new Error(`HTTP ${response.status}: Failed to save WiFi settings`);
       }
 
-      const data = await response.json();
-      console.log("[WiFi Setup] ESP32 responded:", data);
-
-      localStorage.setItem("esp32-ip", esp32Ip);
-      setCurrentIp(esp32Ip);
-      window.dispatchEvent(new Event("storage"));
+      // Save locally for reference
+      localStorage.setItem("wifi-ssid", ssid);
+      localStorage.setItem("wifi-password", password);
+      localStorage.setItem("wifi-configured", "true");
 
       toast({
-        title: "Connected to ESP32",
-        description: `Successfully connected to ${esp32Ip}`,
+        title: "WiFi Settings Saved",
+        description: "ESP32 will connect to your WiFi network automatically",
       });
 
-      setIsConnecting(false);
+      setIsSaving(false);
       onOpenChange(false);
     } catch (error: any) {
       console.error("[WiFi Setup] Error:", error);
 
       toast({
-        title: "Connection Failed",
-        description: error.message || "Could not reach ESP32",
+        title: "Save Failed",
+        description: error.message || "Could not save WiFi settings to cloud",
         variant: "destructive",
       });
-      setIsConnecting(false);
+      setIsSaving(false);
     }
   };
 
@@ -236,84 +87,48 @@ export function WiFiSetupDialog({ open, onOpenChange }: WiFiSetupDialogProps) {
             <div className="p-2 rounded-lg bg-primary/10">
               <Wifi className="h-5 w-5 text-primary" />
             </div>
-            <DialogTitle>Connect to ESP32</DialogTitle>
+            <DialogTitle>WiFi Settings</DialogTitle>
           </div>
-          <DialogDescription>Enter your ESP32 smart plug IP address to establish connection</DialogDescription>
+          <DialogDescription>Configure your ESP32's WiFi connection via the cloud</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="esp32-ip">ESP32 IP Address</Label>
-            <div className="flex gap-2">
-              <Input
-                id="esp32-ip"
-                placeholder="192.168.254.118"
-                value={esp32Ip}
-                onChange={(e) => setEsp32Ip(e.target.value)}
-                className="bg-background text-foreground border-border font-mono text-base"
-              />
-              <Button
-                onClick={scanForESP32}
-                disabled={isScanning || isConnecting}
-                variant="outline"
-                size="icon"
-                title="Auto-detect ESP32"
-              >
-                {isScanning ? "..." : "🔍"}
-              </Button>
-            </div>
+            <Label htmlFor="wifi-ssid">WiFi Name (SSID)</Label>
+            <Input
+              id="wifi-ssid"
+              placeholder="e.g. MyHomeWiFi"
+              value={ssid}
+              onChange={(e) => setSsid(e.target.value)}
+              className="bg-background text-foreground border-border"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="wifi-password">WiFi Password</Label>
+            <Input
+              id="wifi-password"
+              type="password"
+              placeholder="Enter WiFi password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="bg-background text-foreground border-border"
+            />
+          </div>
+
+          <Button 
+            onClick={handleSaveWiFi} 
+            disabled={isSaving} 
+            className="w-full"
+          >
+            {isSaving ? "Saving..." : "Save WiFi Settings"}
+          </Button>
+
+          <div className="bg-muted/50 border border-border rounded-lg p-3">
             <p className="text-xs text-muted-foreground">
-              Click 🔍 to auto-detect, or check Arduino Serial Monitor for IP
+              💡 Your ESP32 will automatically connect to this WiFi network. Make sure your ESP32 is powered on and running the Firebase-enabled code.
             </p>
           </div>
-
-          {foundDevices.length > 0 && (
-            <div className="space-y-2">
-              <Label className="text-xs">Found Devices (click to select):</Label>
-              <div className="flex flex-wrap gap-2">
-                {foundDevices.map((ip) => (
-                  <Button
-                    key={ip}
-                    onClick={() => setEsp32Ip(ip)}
-                    variant={esp32Ip === ip ? "default" : "outline"}
-                    size="sm"
-                    className="font-mono text-xs"
-                  >
-                    {ip}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <Button onClick={handleTestConnection} disabled={isConnecting} variant="outline" className="flex-1">
-              {isConnecting ? "Testing..." : "Test Connection"}
-            </Button>
-            <Button onClick={handleConnect} disabled={isConnecting} className="flex-1">
-              {isConnecting ? "Connecting..." : "Connect"}
-            </Button>
-          </div>
-
-          {testResults.length > 0 && (
-            <div className="bg-muted/50 border border-border rounded-lg p-3 max-h-64 overflow-y-auto">
-              <div className="space-y-1 font-mono text-xs">
-                {testResults.map((result, index) => (
-                  <div key={index} className="text-foreground/90">
-                    {result}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {currentIp && (
-            <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
-              <p className="text-sm">
-                <span className="font-medium">Current Device:</span> <span className="text-primary">{currentIp}</span>
-              </p>
-            </div>
-          )}
         </div>
       </DialogContent>
     </Dialog>

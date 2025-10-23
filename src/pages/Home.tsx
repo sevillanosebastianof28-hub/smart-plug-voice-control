@@ -28,39 +28,9 @@ const Home = () => {
     };
   }, []);
 
-  const fetchESP32Status = useCallback(async (ip: string) => {
-    try {
-      if (!ip || ip === 'null' || !ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
-        return;
-      }
+  const FIREBASE_URL = "https://smart-lumoswitch-v2-default-rtdb.asia-southeast1.firebasedatabase.app";
 
-      const response = await fetch(`http://${ip}/status`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const remoteStatus = data.status === 'on';
-        
-        if (isMountedRef.current) {
-          setPlugStatus(prevStatus => {
-            if (remoteStatus !== prevStatus) {
-              localStorage.setItem('plug-status', String(remoteStatus));
-              return remoteStatus;
-            }
-            return prevStatus;
-          });
-        }
-        return data;
-      }
-    } catch (error) {
-      console.log('ESP32 status check failed (device may be offline)');
-    }
-  }, []);
-
-  const sendCommandToESP32 = useCallback(async (ip: string, status: boolean, retryCount = 0): Promise<boolean> => {
+  const sendLightCommand = useCallback(async (status: boolean): Promise<boolean> => {
     const now = Date.now();
     if (now - lastCommandTimeRef.current < 2000) {
       toast({
@@ -73,50 +43,30 @@ const Home = () => {
     lastCommandTimeRef.current = now;
 
     try {
-      if (!ip || ip === 'null' || !ip.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
-        console.error('[ESP32] Invalid IP:', ip);
-        toast({
-          title: 'Connection Error',
-          description: 'Invalid ESP32 IP. Please configure WiFi settings.',
-          variant: 'destructive'
-        });
-        return false;
-      }
-
       setIsLoading(true);
-      console.log(`[ESP32] Sending ${status ? 'ON' : 'OFF'} command to http://${ip}/control?status=${status ? 'on' : 'off'}`);
+      console.log(`[Firebase] Sending ${status ? 'ON' : 'OFF'} command to cloud`);
 
-      const response = await fetch(`http://${ip}/control?status=${status ? 'on' : 'off'}`, {
-        method: 'GET',
+      const response = await fetch(`${FIREBASE_URL}/device/light.json`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000)
+        body: JSON.stringify({ light: status ? 1 : 0 })
       });
       
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
       const data = await response.json();
-      console.log('[ESP32] Response:', data);
+      console.log('[Firebase] Response:', data);
       
-      if (data.status === (status ? 'on' : 'off')) {
-        setIsLoading(false);
-        return true;
-      } else {
-        throw new Error('Status mismatch');
-      }
+      setIsLoading(false);
+      return true;
     } catch (error: any) {
-      console.error('[ESP32] Error:', error);
-      
-      if (retryCount === 0) {
-        console.log('[ESP32] Retrying...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return sendCommandToESP32(ip, status, 1);
-      }
+      console.error('[Firebase] Error:', error);
       
       if (isMountedRef.current) {
         setIsLoading(false);
         toast({
-          title: 'Connection Failed',
-          description: '⚠️ Cannot reach ESP32. Make sure it\'s powered on and on the same WiFi network.',
+          title: 'Cloud Connection Failed',
+          description: '⚠️ Cannot reach cloud. Check your internet connection.',
           variant: 'destructive'
         });
       }
@@ -130,65 +80,31 @@ const Home = () => {
       setPlugStatus(savedStatus === 'true');
     }
     
-    const esp32Ip = localStorage.getItem('esp32-ip');
-    setIsConnected(!!esp32Ip);
-    
-    // Initial status sync
-    if (esp32Ip) {
-      fetchESP32Status(esp32Ip);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const wifiConfigured = localStorage.getItem('wifi-configured');
+    setIsConnected(!!wifiConfigured);
   }, []);
 
   useEffect(() => {
     const handleStorageChange = () => {
-      const esp32Ip = localStorage.getItem('esp32-ip');
-      setIsConnected(!!esp32Ip);
-      
-      // Fetch status when connection changes
-      if (esp32Ip) {
-        fetchESP32Status(esp32Ip);
-      }
+      const wifiConfigured = localStorage.getItem('wifi-configured');
+      setIsConnected(!!wifiConfigured);
     };
     
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [fetchESP32Status]);
-
-  // Real-time status polling from ESP32
-  useEffect(() => {
-    const esp32Ip = localStorage.getItem('esp32-ip');
-    if (!esp32Ip || !isConnected) return;
-
-    // Poll ESP32 status every 3 seconds
-    const pollInterval = setInterval(() => {
-      if (isMountedRef.current) {
-        fetchESP32Status(esp32Ip);
-      }
-    }, 3000);
-
-    return () => clearInterval(pollInterval);
-  }, [isConnected, fetchESP32Status]);
+  }, []);
 
   const togglePlug = async () => {
     const newStatus = !plugStatus;
     setPlugStatus(newStatus);
     localStorage.setItem('plug-status', String(newStatus));
     
-    // Send command to ESP32 if connected
-    const esp32Ip = localStorage.getItem('esp32-ip');
-    if (esp32Ip) {
-      const success = await sendCommandToESP32(esp32Ip, newStatus);
-      if (success) {
-        toast({
-          title: newStatus ? '✅ LED is ON' : '💤 LED is OFF',
-          description: newStatus ? 'Device is now powered' : 'Device is now off'
-        });
-      }
-    } else {
+    // Send command to Firebase
+    const success = await sendLightCommand(newStatus);
+    if (success) {
       toast({
-        title: newStatus ? '✅ LED is ON' : '💤 LED is OFF',
-        description: newStatus ? 'Device is now powered' : 'Device is now off'
+        title: newStatus ? '✅ Light is ON' : '💤 Light is OFF',
+        description: newStatus ? 'Command sent to ESP32 via cloud' : 'Command sent to ESP32 via cloud'
       });
     }
   };
@@ -237,8 +153,6 @@ const Home = () => {
       if (finalTranscript) {
         const transcriptLower = finalTranscript.toLowerCase().trim();
         setFeedback(`You said: "${finalTranscript}"`);
-
-        const esp32Ip = localStorage.getItem('esp32-ip');
         
         // Check for "turn on" commands
         if (
@@ -247,24 +161,17 @@ const Home = () => {
           transcriptLower.includes('activate') ||
           transcriptLower === 'on'
         ) {
-          setFeedback('Sure! Turning on the LED now...');
+          setFeedback('Sure! Turning on the light now...');
           const newStatus = true;
           setPlugStatus(newStatus);
           localStorage.setItem('plug-status', 'true');
           
-          if (esp32Ip) {
-            const success = await sendCommandToESP32(esp32Ip, newStatus);
-            if (success) {
-              setFeedback('✅ The LED is now on.');
-              toast({ 
-                title: '✅ LED is ON', 
-                description: 'Voice command executed successfully' 
-              });
-            }
-          } else {
+          const success = await sendLightCommand(newStatus);
+          if (success) {
+            setFeedback('✅ The light is now on.');
             toast({ 
-              title: '✅ LED is ON', 
-              description: 'Voice command executed (offline mode)' 
+              title: '✅ Light is ON', 
+              description: 'Voice command sent to cloud' 
             });
           }
         } 
@@ -275,24 +182,17 @@ const Home = () => {
           transcriptLower.includes('deactivate') ||
           transcriptLower === 'off'
         ) {
-          setFeedback('Sure! Turning off the LED now...');
+          setFeedback('Sure! Turning off the light now...');
           const newStatus = false;
           setPlugStatus(newStatus);
           localStorage.setItem('plug-status', 'false');
           
-          if (esp32Ip) {
-            const success = await sendCommandToESP32(esp32Ip, newStatus);
-            if (success) {
-              setFeedback('💤 The LED is now off.');
-              toast({ 
-                title: '💤 LED is OFF', 
-                description: 'Voice command executed successfully' 
-              });
-            }
-          } else {
+          const success = await sendLightCommand(newStatus);
+          if (success) {
+            setFeedback('💤 The light is now off.');
             toast({ 
-              title: '💤 LED is OFF', 
-              description: 'Voice command executed (offline mode)' 
+              title: '💤 Light is OFF', 
+              description: 'Voice command sent to cloud' 
             });
           }
         }
@@ -300,33 +200,16 @@ const Home = () => {
         else if (
           transcriptLower.includes('status') ||
           transcriptLower.includes('check') ||
-          transcriptLower.includes('is the led') ||
           transcriptLower.includes('is the light') ||
-          transcriptLower.includes('what') && transcriptLower.includes('led')
+          transcriptLower.includes('what')
         ) {
-          setFeedback('Checking LED status...');
-          
-          if (esp32Ip) {
-            const statusData = await fetchESP32Status(esp32Ip);
-            if (statusData) {
-              const currentStatus = statusData.status === 'on';
-              const statusText = currentStatus ? 'on' : 'off';
-              const emoji = currentStatus ? '💡' : '💤';
-              setFeedback(`${emoji} The LED is currently ${statusText}.`);
-              toast({ 
-                title: `LED Status: ${statusText.toUpperCase()}`,
-                description: `${emoji} The LED is currently ${statusText}.`
-              });
-            }
-          } else {
-            const localStatus = plugStatus ? 'on' : 'off';
-            const emoji = plugStatus ? '💡' : '💤';
-            setFeedback(`${emoji} The LED is currently ${localStatus} (offline mode).`);
-            toast({ 
-              title: `LED Status: ${localStatus.toUpperCase()}`,
-              description: `${emoji} The LED is currently ${localStatus} (offline mode).`
-            });
-          }
+          const localStatus = plugStatus ? 'on' : 'off';
+          const emoji = plugStatus ? '💡' : '💤';
+          setFeedback(`${emoji} The light is currently ${localStatus}.`);
+          toast({ 
+            title: `Light Status: ${localStatus.toUpperCase()}`,
+            description: `${emoji} The light is currently ${localStatus}.`
+          });
         }
         else {
           setFeedback('Command not recognized. Try: "turn on", "turn off", or "check status"');
@@ -413,7 +296,7 @@ const Home = () => {
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6 md:p-8 relative z-10">
         <div className="max-w-2xl w-full space-y-8 sm:space-y-12 animate-fade-in">
           
-          {/* ESP32 Connection Status */}
+          {/* Cloud Connection Status */}
           <div className={`bg-card/80 backdrop-blur-sm border rounded-xl p-4 transition-all luminous-border ${
             isConnected ? 'border-primary/30' : 'border-destructive/30'
           }`}>
@@ -421,7 +304,7 @@ const Home = () => {
               <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-primary animate-pulse' : 'bg-destructive'}`} />
                 <span className="text-sm font-medium">
-                  {isConnected ? 'ESP32 Connected' : 'ESP32 Not Connected'}
+                  {isConnected ? '☁️ Cloud Connected' : '☁️ WiFi Not Configured'}
                 </span>
               </div>
               <Button
@@ -430,12 +313,12 @@ const Home = () => {
                 onClick={() => setWifiDialogOpen(true)}
                 className="text-xs"
               >
-                {isConnected ? 'Reconfigure' : 'Setup WiFi'}
+                {isConnected ? 'Change WiFi' : 'Setup WiFi'}
               </Button>
             </div>
             {!isConnected && (
               <p className="text-xs text-muted-foreground mt-2">
-                Please connect to your ESP32 smart plug via WiFi Setup before controlling the device.
+                Configure WiFi settings to connect your ESP32 to the cloud.
               </p>
             )}
           </div>
@@ -512,14 +395,9 @@ const Home = () => {
                     onClick={async () => {
                       setPlugStatus(true);
                       localStorage.setItem('plug-status', 'true');
-                      const esp32Ip = localStorage.getItem('esp32-ip');
-                      if (esp32Ip) {
-                        const success = await sendCommandToESP32(esp32Ip, true);
-                        if (success) {
-                          toast({ title: '✅ LED is ON', description: 'Device is now powered' });
-                        }
-                      } else {
-                        toast({ title: '✅ LED is ON', description: 'Device is now powered' });
+                      const success = await sendLightCommand(true);
+                      if (success) {
+                        toast({ title: '✅ Light is ON', description: 'Command sent to cloud' });
                       }
                     }}
                     disabled={plugStatus || isLoading}
@@ -534,14 +412,9 @@ const Home = () => {
                     onClick={async () => {
                       setPlugStatus(false);
                       localStorage.setItem('plug-status', 'false');
-                      const esp32Ip = localStorage.getItem('esp32-ip');
-                      if (esp32Ip) {
-                        const success = await sendCommandToESP32(esp32Ip, false);
-                        if (success) {
-                          toast({ title: '💤 LED is OFF', description: 'Device is now off' });
-                        }
-                      } else {
-                        toast({ title: '💤 LED is OFF', description: 'Device is now off' });
+                      const success = await sendLightCommand(false);
+                      if (success) {
+                        toast({ title: '💤 Light is OFF', description: 'Command sent to cloud' });
                       }
                     }}
                     disabled={!plugStatus || isLoading}
